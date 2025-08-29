@@ -5,6 +5,7 @@ import React, { useEffect, useRef } from 'react'
 import Navbar from './components/Navbar'
 
 
+
 // ---------- Optional Three.js Background (client-only) ----------
 // Install three: `npm i three`
 // If you don't want the floating particles, set <ThreeBackground enabled={false} />
