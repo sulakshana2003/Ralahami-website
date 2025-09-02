@@ -24,14 +24,16 @@ export default function AdminAutoRedirect() {
     const role = (session?.user as any)?.role;
 
     // If we already know the role, act without refreshing
-    if (role === "admin") {
-      router.replace("/admin/users");
-      return;
-    }
-    if (role === "user") {
-      // normal user: do nothing (stay on page)
-      return;
-    }
+// inside useEffect, where it currently has:
+// inside useEffect, where it currently has:
+if (role === "admin") {
+  if (router.pathname === "/" || router.pathname === "/login") {
+-   router.replace("/admin/users");
++   router.replace("/admin");           // 👈 send to menu instead
+  }
+}
+
+
 
     // Role is missing (rare timing). Refresh ONCE to populate it.
     if (!triedRefreshRef.current) {

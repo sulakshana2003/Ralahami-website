@@ -9,15 +9,18 @@
     "lint": "next lint"
   },
   "dependencies": {
+    "bcrypt": "^6.0.0",
+    "bcryptjs": "^3.0.2",
     "mongoose": "^8.17.1",
     "next": "15.4.6",
+    "next-auth": "^4.24.11",
     "react": "19.1.0",
     "react-dom": "19.1.0",
     "react-hot-toast": "^2.6.0",
     "swr": "^2.3.6",
     "three": "^0.179.1",
     "zod": "^4.0.17",
-    "zustand": "^5.0.7"
+    "zustand": "^5.0.8"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3",
