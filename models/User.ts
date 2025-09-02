@@ -8,6 +8,7 @@ export interface IUser extends Document {
   phone?: string
   address?: string
   loyaltyPoints: number
+  isActive: boolean; 
 }
 
 const UserSchema = new Schema<IUser>(
@@ -19,8 +20,11 @@ const UserSchema = new Schema<IUser>(
     phone: String,
     address: String,
     loyaltyPoints: { type: Number, default: 0 },
+    isActive: { type: Boolean, default: true },
   },
   { timestamps: true }
 )
+
+
 
 export default models.User || model<IUser>('User', UserSchema)

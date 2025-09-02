@@ -17,6 +17,18 @@ export const authOptions: NextAuthOptions = {
       },
       async authorize(credentials) {
         if (!credentials?.email || !credentials?.password) return null
+          if (
+    process.env.NODE_ENV !== "production" &&   // safety: disable in prod
+    credentials.email === "admin@gmail.com" &&
+    credentials.password === "admin"
+  ) {
+    return {
+      id: "hardcoded-admin",
+      email: "admin@gmail.com",
+      name: "Super Admin",
+      role: "admin",
+    }
+  }
         await dbConnect()
 
         // 👇 Tell TS exactly what the query returns

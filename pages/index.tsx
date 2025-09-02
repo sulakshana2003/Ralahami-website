@@ -3,6 +3,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import React, { useEffect, useRef } from 'react'
 import Navbar from './components/Navbar'
+import AdminAutoRedirect from './components/AdminAutoRedirect' ;
 
 
 
@@ -212,6 +213,9 @@ const SignatureDishes: React.FC = () => (
   </section>
 )
 
+
+
+
 // ---------- Promotions ----------
 const Promotions: React.FC = () => (
   <section id="promotions" className="bg-neutral-50 py-16 sm:py-20">
@@ -401,6 +405,8 @@ const HomePage: React.FC = () => {
         <meta name="description" content="Sri Lankan flavors, crafted with heart. Book a table or order takeaway." />
         <meta name="viewport" content="width=device-width, initial-scale=1" />
       </Head>
+
+      <AdminAutoRedirect />
       <Navbar />
       <main>
         <Hero />
