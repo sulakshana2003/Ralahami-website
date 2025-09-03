@@ -28,7 +28,7 @@ export default function AdminAutoRedirect() {
 // inside useEffect, where it currently has:
 if (role === "admin") {
   if (router.pathname === "/" || router.pathname === "/login") {
--   router.replace("/admin/users");
+-   router.replace("/admin");
 +   router.replace("/admin");           // 👈 send to menu instead
   }
 }
@@ -42,7 +42,7 @@ if (role === "admin") {
         const fresh = await update();
         const freshRole = (fresh?.user as any)?.role;
         if (freshRole === "admin") {
-          router.replace("/admin/users");
+          router.replace("/admin");
         }
       })();
     }
