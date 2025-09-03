@@ -166,10 +166,10 @@ const Hero: React.FC = () => (
 type Dish = { title: string; img: string; price?: string; tag?: string }
 const dishes: Dish[] = [
   { title: 'Jaffna Crab Curry', img: '/images/JaffnaCabCurry.jpg', price: 'Rs. 4200', tag: 'Signature' },
-  { title: 'Hoppers & Pol Sambol', img: '/images/dishes/hoppers.jpg', price: 'Rs. 900' },
-  { title: 'Black Pork Curry', img: '/images/dishes/pork.jpg', price: 'Rs. 2600' },
-  { title: 'Lamprais', img: '/images/dishes/lamprais.jpg', price: 'Rs. 2400' },
-  { title: 'Watalappan', img: '/images/dishes/watalappan.jpg', price: 'Rs. 850', tag: 'Dessert' },
+  { title: 'Hoppers & Pol Sambol', img: '/images/stringhoppers.jpeg', price: 'Rs. 900' },
+  { title: 'Black Pork Curry', img: '/images/blackPork.jpg', price: 'Rs. 2600' },
+  { title: 'Lamprais', img: '/images/Lamprice.jpeg', price: 'Rs. 2400' },
+  /* { title: 'Watalappan', img: '/images/dishes/watalappan.jpg', price: 'Rs. 850', tag: 'Dessert' }, */
 ]
 
 const SignatureDishes: React.FC = () => (
@@ -278,15 +278,15 @@ const HoursLocation: React.FC = () => (
           </div>
           <p className="mt-6 text-xs text-neutral-500">Kitchen hours may vary on holidays.</p>
         </div>
-        <div className="overflow-hidden rounded-2xl border border-neutral-200">
+        {/* <div className="overflow-hidden rounded-2xl border border-neutral-200">
           <iframe
             title="Map to Ralahami"
             className="h-[360px] w-full"
             loading="lazy"
             referrerPolicy="no-referrer-when-downgrade"
             src="https://www.google.com/maps/embed?pb=!1m18!1m12!1m3!1d7922.6207!2d79.8612!3d6.9271!2m3!1f0!2f0!3f0!3m2!1i1024!2i768!4f13.1!3m3!1m2!1s0x0%3A0x0!2sColombo!5e0!3m2!1sen!2slk!4v00000000000"
-          />
-        </div>
+          /> 
+        </div> */}
       </div>
     </Container>
   </section>

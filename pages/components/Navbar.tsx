@@ -8,11 +8,11 @@ import { useCart } from "@/hooks/useCart";
 const NavLinks = () => (
   <>
     <Link href="/products" className="text-sm text-neutral-700 hover:text-black">Menu</Link>
-    <Link href="/cart" className="text-sm text-neutral-700 hover:text-black">Order</Link>
+    {/* <Link href="/cart" className="text-sm text-neutral-700 hover:text-black">Order</Link> */}
     <Link href="/reservation" className="text-sm text-neutral-700 hover:text-black">Reserve</Link>
     <Link href="/#promotions" className="text-sm text-neutral-700 hover:text-black">Promotions</Link>
-    <Link href="/about" className="text-sm text-neutral-700 hover:text-black">About</Link>
-    <Link href="/contact" className="text-sm text-neutral-700 hover:text-black">Contact</Link>
+    {/* <Link href="/about" className="text-sm text-neutral-700 hover:text-black">About</Link>
+    <Link href="/contact" className="text-sm text-neutral-700 hover:text-black">Contact</Link> */}
   </>
 );
 
@@ -70,7 +70,7 @@ const Navbar: React.FC = () => {
               </button>
             </>
           )}
-
+{/* 
           <Link
             href="/cart"
             className="relative rounded-full border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-50"
@@ -81,7 +81,7 @@ const Navbar: React.FC = () => {
                 {cartCount}
               </span>
             )}
-          </Link>
+          </Link> */}
 
           <Link
             href="/reservation"
@@ -144,7 +144,7 @@ const Navbar: React.FC = () => {
                 </>
               )}
 
-              <Link
+              {/* <Link
                 href="/cart"
                 onClick={() => setOpen(false)}
                 className="relative rounded-full border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-50"
@@ -155,7 +155,7 @@ const Navbar: React.FC = () => {
                     {cartCount}
                   </span>
                 )}
-              </Link>
+              </Link> */}
 
               <Link
                 href="/reservation"

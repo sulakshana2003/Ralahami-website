@@ -3,6 +3,8 @@ import React from 'react'
 import ProductCard from '../../src/components/ProductCard'
 import { dbConnect } from '../../lib/db'
 import Product from '../../models/Product'
+import Navbar from '../components/Navbar'
+
 import type { GetServerSideProps, InferGetServerSidePropsType } from 'next'
 //import Container from '@/components/Container'
 
@@ -30,6 +32,7 @@ type ProductItem = {
 const ProductsPage: React.FC<Props> = ({ products }) => {
   return (
     <>
+      <Navbar/>
       <Head><title>Menu — Ralahami</title></Head>
       <div className="pt-28 pb-10">
         <div>
