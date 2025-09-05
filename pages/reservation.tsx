@@ -71,11 +71,14 @@ export default function ReservationPage() {
 
       <div className="pt-28 pb-16 min-h-screen bg-cover bg-center" style={{ backgroundImage: "url('/images/reservation-bg.png')" }}>
         <div className="mx-auto w-full max-w-3xl px-4 sm:px-6 lg:px-8">
-          <div className="mb-8 text-center">
-            <p className="text-xs tracking-[0.25em] text-amber-600 uppercase">Reservation</p>
-            <h1 className="mt-2 text-4xl font-semibold">Book a Table</h1>
-            <p className="mt-2 text-neutral-600">Select a date & time, tell us your party size, and we’ll save your table.</p>
-          </div>
+          <div className="mb-8 text-center bg-white/90 backdrop-blur rounded-xl p-6 shadow-lg mx-auto max-w-3xl">
+  <p className="text-xs tracking-[0.25em] text-amber-600 uppercase">Reservation</p>
+  <h1 className="mt-2 text-4xl font-semibold">Book a Table</h1>
+  <p className="mt-2 text-neutral-600">
+    Select a date & time, tell us your party size, and we’ll save your table!
+  </p>
+</div>
+
 
           {successId ? (
             <div className="rounded-2xl border border-green-200 bg-green-50 p-6">
