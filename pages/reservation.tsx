@@ -69,8 +69,17 @@ export default function ReservationPage() {
       <Head><title>Reserve a Table — Ralahami</title></Head>
       <Navbar />
 
-      <div className="pt-28 pb-16 min-h-screen bg-cover bg-center" style={{ backgroundImage: "url('/images/reservation-bg.png')" }}>
-        <div className="mx-auto w-full max-w-3xl px-4 sm:px-6 lg:px-8">
+      <div
+  className="relative pt-28 pb-16 min-h-screen bg-cover bg-center"
+  style={{ backgroundImage: "url('/images/reservation-bg.png')" }}
+>
+  {/* dark overlay */}
+  <div className="absolute inset-0 bg-black/25" />
+
+  {/* content above overlay */}
+  <div className="relative mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8">
+    ...
+
           <div className="mb-8 text-center bg-white/90 backdrop-blur rounded-xl p-6 shadow-lg mx-auto max-w-3xl">
   <p className="text-xs tracking-[0.25em] text-amber-600 uppercase">Reservation</p>
   <h1 className="mt-2 text-4xl font-semibold">Book a Table</h1>
