@@ -89,7 +89,11 @@ export default function ReservationPage() {
               </a>
             </div>
           ) : (
-            <form onSubmit={onSubmit} className="grid gap-5 rounded-2xl border p-6 sm:grid-cols-2">
+            <form
+  onSubmit={onSubmit}
+  className="grid gap-5 rounded-2xl border p-6 sm:grid-cols-2 bg-white/90 backdrop-blur shadow-xl"
+>
+
               {/* Left column */}
               <div className="space-y-4">
                 <div>
