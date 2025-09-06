@@ -7,7 +7,7 @@ import { useCart } from "@/hooks/useCart";
 
 const NavLinks = () => (
   <>
-    <Link href="/products" className="text-sm text-neutral-700 hover:text-black">Menu</Link>
+    <Link href="/menu" className="text-sm text-neutral-700 hover:text-black">Menu</Link>
     {/* <Link href="/cart" className="text-sm text-neutral-700 hover:text-black">Order</Link> */}
     <Link href="/reservation" className="text-sm text-neutral-700 hover:text-black">Reserve</Link>
     <Link href="/#promotions" className="text-sm text-neutral-700 hover:text-black">Promotions</Link>
