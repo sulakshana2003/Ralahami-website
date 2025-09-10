@@ -9,7 +9,10 @@ import { CAPACITY_PER_SLOT, MAX_PARTY_SIZE, MIN_PARTY_SIZE, BLACKOUT_DATES } fro
 const createSchema = z.object({
   name: z.string().min(1),
   email: z.string().email(),
-  phone: z.string().optional(),
+  phone: z.string()
+  .regex(/^\d+$/, { message: "Phone number must contain only digits" }) // ✅ only digits allowed
+  .refine((val) => !val.startsWith("-"), { message: "Phone number cannot be negative" }) // ✅ block negatives
+  .optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),  // yyyy-mm-dd
   time: z.string().regex(/^\d{2}:\d{2}$/),       // HH:mm
   partySize: z.number().int().min(MIN_PARTY_SIZE).max(MAX_PARTY_SIZE),
