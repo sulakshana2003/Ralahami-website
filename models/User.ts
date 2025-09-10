@@ -1,4 +1,4 @@
-import { Schema, model, models, Document } from 'mongoose'
+/* import { Schema, model, models, Document } from 'mongoose'
 
 export interface IUser extends Document {
   name: string
@@ -26,5 +26,37 @@ const UserSchema = new Schema<IUser>(
 )
 
 
+
+export default models.User || model<IUser>('User', UserSchema)
+ */
+
+
+
+import { Schema, model, models, Document } from 'mongoose'
+
+export interface IUser extends Document {
+  name: string
+  email: string
+  passwordHash: string
+  role: 'user' | 'admin'
+  phone: string
+  address: string
+}
+
+const UserSchema = new Schema<IUser>(
+  {
+    name: { type: String, required: true, trim: true },
+    email: { type: String, required: true, unique: true, lowercase: true },
+    passwordHash: { type: String, required: true },
+    role: { type: String, enum: ['user', 'admin'], default: 'user' },
+    phone: {
+      type: String,
+      required: true,
+      match: [/^\+94\s7\d{8}$/, 'Phone number must be in +94 7XXXXXXXX format'],
+    },
+    address: { type: String, required: true },
+  },
+  { timestamps: true }
+)
 
 export default models.User || model<IUser>('User', UserSchema)
