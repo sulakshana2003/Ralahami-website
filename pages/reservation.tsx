@@ -47,9 +47,15 @@ export default function ReservationPage() {
   async function onSubmit(e: React.FormEvent) {
   e.preventDefault()
 
-  if (phone && phone.trim().startsWith('-')) {
-    setError("Phone number cannot be negative")
-    return
+  if (phone) {
+    if (phone.startsWith('-')) {
+      setError('Phone number cannot be negative')
+      return
+    }
+    if (!/^\d+$/.test(phone)) {
+      setError('Phone number must contain only digits')
+      return
+    }
   }
 
   setSubmitting(true)
@@ -157,20 +163,27 @@ export default function ReservationPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium">Phone (optional)</label>
+                  <label className="block text-sm font-medium">Phone </label>
                   <input
                   type="tel"
-                  className="mt-1 w-full rounded-xl border px-3 h-11"
-                  value={phone}
-                  onChange={(e) => {
-                  const val = e.target.value
-                  if (val.startsWith('-')) {
-                    setError("Phone number cannot be negative")
-                    return
-                  }
-                  setPhone(val)
-                  }}
-                  />
+  inputMode="numeric"
+  pattern="[0-9]*"
+  className="mt-1 w-full rounded-xl border px-3 h-11"
+  value={phone}
+  onChange={(e) => {
+    const v = e.target.value
+    if (v.startsWith('-')) {
+      setError('Phone number cannot be negative')
+      return
+    }
+    if (!/^\d*$/.test(v)) {
+      setError('Phone number must contain only digits')
+      return
+    }
+    setError(null)
+    setPhone(v)
+  }}
+/>
                 </div>
               </div>
 
