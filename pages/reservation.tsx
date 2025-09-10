@@ -45,9 +45,15 @@ export default function ReservationPage() {
   }, [date])
 
   async function onSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setSubmitting(true)
-    setError(null)
+  e.preventDefault()
+
+  if (phone && phone.trim().startsWith('-')) {
+    setError("Phone number cannot be negative")
+    return
+  }
+
+  setSubmitting(true)
+  setError(null)
     try {
       const r = await fetch('/api/reservations', {
         method: 'POST',
@@ -152,8 +158,19 @@ export default function ReservationPage() {
 
                 <div>
                   <label className="block text-sm font-medium">Phone (optional)</label>
-                  <input className="mt-1 w-full rounded-xl border px-3 h-11"
-                         value={phone} onChange={(e) => setPhone(e.target.value)} />
+                  <input
+                  type="tel"
+                  className="mt-1 w-full rounded-xl border px-3 h-11"
+                  value={phone}
+                  onChange={(e) => {
+                  const val = e.target.value
+                  if (val.startsWith('-')) {
+                    setError("Phone number cannot be negative")
+                    return
+                  }
+                  setPhone(val)
+                  }}
+                  />
                 </div>
               </div>
 
