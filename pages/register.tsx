@@ -2,7 +2,7 @@
 import { FormEvent, useState } from 'react'
 import { useRouter } from 'next/router'
 import Navbar from '../pages/components/Navbar'
-
+import Footer from "./components/Footer";
 
 export default function Register() {
   const router = useRouter()
@@ -41,6 +41,7 @@ export default function Register() {
   }
 
   return (
+    <>
     <div className="pt-28 px-4 max-w-md mx-auto">
       <Navbar/>
       <h1 className="text-3xl font-semibold">Create account</h1>
@@ -99,5 +100,7 @@ export default function Register() {
         </button>
       </form>
     </div>
+    <Footer/>
+    </>
   )
 }

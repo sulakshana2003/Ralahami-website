@@ -1,9 +1,11 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import Head from 'next/head'
 import React from 'react'
 import ProductCard from '../../src/components/ProductCard'
 import { dbConnect } from '../../lib/db'
 import Product from '../../models/Product'
 import Navbar from '../components/Navbar'
+import Footer from '../components/Footer'
 
 import type { GetServerSideProps, InferGetServerSidePropsType } from 'next'
 //import Container from '@/components/Container'
@@ -45,6 +47,7 @@ const ProductsPage: React.FC<Props> = ({ products }) => {
           </div>
         </div>
       </div>
+      <Footer/>
     </>
   )
 }

@@ -3,6 +3,8 @@ import Image from "next/image";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useCart } from "@/src/context/CartContext"; // ← swap if yours is "@/hooks/useCart"
+import Navbar from './components/Navbar'
+import Footer from './components/Footer'
 
 const FREE_DELIVERY_THRESHOLD = 5000; // LKR – tweak as you like
 
@@ -55,7 +57,10 @@ export default function CartPage() {
   }
 
   return (
+    <>
+     <Navbar/>
     <div className="pt-28 pb-20">
+     
       <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[1.8fr_1fr]">
         {/* Cart items */}
         <section className="space-y-4">
@@ -262,6 +267,9 @@ export default function CartPage() {
           </ul>
         </aside>
       </div>
+     
     </div>
+     <Footer/>
+    </>
   );
 }

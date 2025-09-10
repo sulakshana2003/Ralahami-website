@@ -1,9 +1,12 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import Head from 'next/head'
 import { FormEvent, useState } from 'react'
 import type { GetServerSideProps } from 'next'
 import { dbConnect } from '@/lib/db'
 import About from '@/models/About'
 import Navbar from '../pages/components/Navbar'
+import Footer from '../pages/components/Footer'
+
 
 type ContactInfo = { address?: string; phone?: string; email?: string }
 
@@ -87,6 +90,7 @@ export default function ContactPage({ info }: { info: ContactInfo }) {
           </div>
         </div>
       </main>
+      <Footer />
     </>
   )
 }

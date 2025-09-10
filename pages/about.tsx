@@ -1,9 +1,11 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import Head from 'next/head'
 import Image from 'next/image'
 import type { GetServerSideProps } from 'next'
 import { dbConnect } from '@/lib/db'
 import About from '@/models/About'
 import Navbar from '../pages/components/Navbar'
+import Footer from '../pages/components/Footer'
 
 type AboutVM = {
   title: string
@@ -59,6 +61,7 @@ export default function AboutPage({ about }: { about: AboutVM | null }) {
           ) : null}
         </div>
       </main>
+      <Footer />
     </>
   )
 }

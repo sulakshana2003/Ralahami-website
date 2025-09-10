@@ -1,10 +1,11 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import Head from 'next/head'
 import Image from 'next/image'
 import Link from 'next/link'
 import React, { useEffect, useRef } from 'react'
 import Navbar from './components/Navbar'
 import AdminAutoRedirect from './components/AdminAutoRedirect' ;
-
+//import Footer from "./components/Footer";
 
 
 // ---------- Optional Three.js Background (client-only) ----------

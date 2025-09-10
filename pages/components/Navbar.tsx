@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // src/components/Navbar.tsx
 import React, { useEffect, useState } from "react";
 import Link from "next/link";
@@ -8,8 +9,9 @@ import { useCart } from "@/hooks/useCart";
 const NavLinks = () => (
   <>
     <Link href="/products" className="text-sm text-neutral-700 hover:text-black">Menu</Link>
-    <Link href="/reservation" className="text-sm text-neutral-700 hover:text-black">Reserve</Link>
     <Link href="/#promotions" className="text-sm text-neutral-700 hover:text-black">Promotions</Link>
+    <Link href="/contact" className="text-sm text-neutral-700 hover:text-black">Contact Us</Link>
+    <Link href="/about" className="text-sm text-neutral-700 hover:text-black">About Us</Link>
   </>
 );
 
@@ -20,6 +22,7 @@ const Navbar: React.FC = () => {
   // cart & hydration guard
   const [mounted, setMounted] = useState(false);
   useEffect(() => setMounted(true), []);
+  // eslint-disable-next-line react-hooks/rules-of-hooks
   const items = useCart ? useCart((s) => s.items) : [];
   const cartCount = mounted ? items.reduce((n: number, i: any) => n + (i?.qty ?? 0), 0) : 0;
 

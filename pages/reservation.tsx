@@ -1,7 +1,10 @@
+/* eslint-disable @next/next/no-html-link-for-pages */
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import React, { useEffect, useMemo, useState } from 'react'
 import Head from 'next/head'
 import { format } from 'date-fns'
 import Navbar from './components/Navbar'
+import Footer from '../pages/components/Footer'
 
 type Slot = { time: string; remaining: number }
 
@@ -174,6 +177,7 @@ export default function ReservationPage() {
           )}
         </div>
       </div>
+      <Footer/>
     </>
   )
 }

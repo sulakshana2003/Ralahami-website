@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 
 
@@ -11,6 +12,7 @@ import { getServerSession } from "next-auth";
 import { authOptions } from "./api/auth/[...nextauth]";
 import type { GetServerSidePropsContext } from "next";
 import Navbar from "./components/Navbar";
+import Footer from "./components/Footer";
 
 export default function LoginPage() {
   const router = useRouter();
@@ -102,6 +104,7 @@ export default function LoginPage() {
           </p>
         </div>
       </div>
+      <Footer/>
     </>
   );
 }
