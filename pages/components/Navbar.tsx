@@ -8,11 +8,8 @@ import { useCart } from "@/hooks/useCart";
 const NavLinks = () => (
   <>
     <Link href="/products" className="text-sm text-neutral-700 hover:text-black">Menu</Link>
-    {/* <Link href="/cart" className="text-sm text-neutral-700 hover:text-black">Order</Link> */}
     <Link href="/reservation" className="text-sm text-neutral-700 hover:text-black">Reserve</Link>
     <Link href="/#promotions" className="text-sm text-neutral-700 hover:text-black">Promotions</Link>
-    {/* <Link href="/about" className="text-sm text-neutral-700 hover:text-black">About</Link>
-    <Link href="/contact" className="text-sm text-neutral-700 hover:text-black">Contact</Link> */}
   </>
 );
 
@@ -70,18 +67,21 @@ const Navbar: React.FC = () => {
               </button>
             </>
           )}
-{/* 
+
+          {/* Cart (desktop) */}
           <Link
             href="/cart"
-            className="relative rounded-full border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-50"
+            className="relative inline-flex items-center gap-2 rounded-full border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-50"
+            aria-label="Open cart"
           >
-            Cart
+            <span role="img" aria-hidden>🛒</span>
+            <span>Cart</span>
             {mounted && cartCount > 0 && (
               <span className="absolute -right-2 -top-2 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-black px-1 text-[11px] font-semibold text-white">
                 {cartCount}
               </span>
             )}
-          </Link> */}
+          </Link>
 
           <Link
             href="/reservation"
@@ -112,7 +112,7 @@ const Navbar: React.FC = () => {
 
       {/* Mobile panel */}
       {open && (
-        <div className="md:hidden border-t border-neutral-200 bg-white/90 backdrop-blur">
+        <div className="border-t border-neutral-200 bg-white/90 backdrop-blur md:hidden">
           <div className="mx-auto flex w-full max-w-7xl flex-col gap-3 px-4 py-3">
             <div className="flex flex-col gap-3">
               <NavLinks />
@@ -144,18 +144,21 @@ const Navbar: React.FC = () => {
                 </>
               )}
 
-              {/* <Link
+              {/* Cart (mobile) */}
+              <Link
                 href="/cart"
                 onClick={() => setOpen(false)}
-                className="relative rounded-full border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-50"
+                className="relative inline-flex items-center gap-2 rounded-full border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-50"
+                aria-label="Open cart"
               >
-                Cart
+                <span role="img" aria-hidden>🛒</span>
+                <span>Cart</span>
                 {mounted && cartCount > 0 && (
-                  <span className="ml-2 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-black px-1 text-[11px] font-semibold text-white">
+                  <span className="ml-1 inline-flex h-5 min-w-[20px] items-center justify-center rounded-full bg-black px-1 text-[11px] font-semibold text-white">
                     {cartCount}
                   </span>
                 )}
-              </Link> */}
+              </Link>
 
               <Link
                 href="/reservation"

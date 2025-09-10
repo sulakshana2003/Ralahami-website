@@ -106,6 +106,9 @@ import Image from 'next/image'
 import type { GetServerSideProps } from 'next'
 import { dbConnect } from '@/lib/db'
 import Product from '@/models/Product'
+import AddToCartButton from "@/src/components/AddToCartButton";
+
+
 //import AddToCartButton from '@/components/AddToCartButton'
 
 type ProductItem = {

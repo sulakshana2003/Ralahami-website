@@ -46,7 +46,7 @@ const ProductCard: React.FC<Props> = ({ product }) => {
           )}
         </div>
         <div className="mt-4">
-          <AddToCartButton product={product as any} className="w-full" />
+          <AddToCartButton product={product as any} />
         </div>
       </div>
     </article>

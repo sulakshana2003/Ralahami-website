@@ -1,35 +1,26 @@
-import React from 'react'
-import { useCart } from '@/hooks/useCart'
-import { toast } from 'react-hot-toast'
+import { useState } from "react";
+import { useCart } from "@/src/context/CartContext";
+import type { ProductItem } from "@/src/types/cart";
 
-type Props = {
-  product: {
-    _id: string
-    slug: string
-    name: string
-    price: number
-    promotion?: number
-    images?: string[]
-  }
-  className?: string
-}
-
-const AddToCartButton: React.FC<Props> = ({ product, className = '' }) => {
-  const add = useCart((s) => s.add)
-  const finalPrice = Math.max(product.price - (product.promotion || 0), 0)
-  const img = product.images?.[0]
+export default function AddToCartButton({ product }: { product: ProductItem }) {
+  const { addToCart } = useCart();
+  const [qty, setQty] = useState(1);
 
   return (
-    <button
-      onClick={() => {
-        add({ _id: product._id, slug: product.slug, name: product.name, price: product.price, promotion: product.promotion, finalPrice, image: img }, 1)
-        toast.success('Added to cart')
-      }}
-      className={`rounded-full bg-black px-4 py-2 text-sm font-medium text-white hover:bg-neutral-800 ${className}`}
-    >
-      Add to Cart
-    </button>
-  )
+    <div className="flex items-center gap-3">
+      <input
+        type="number"
+        min={1}
+        value={qty}
+        onChange={(e) => setQty(Math.max(1, parseInt(e.target.value || "1", 10)))}
+        className="w-16 rounded-full border border-neutral-300 px-3 py-2 text-sm"
+      />
+      <button
+        onClick={() => addToCart(product, qty)}
+        className="rounded-full border border-neutral-300 px-4 py-2 text-sm font-medium hover:bg-neutral-50"
+      >
+        Add to cart
+      </button>
+    </div>
+  );
 }
-
-export default AddToCartButton
