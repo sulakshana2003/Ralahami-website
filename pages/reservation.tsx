@@ -48,9 +48,21 @@ export default function ReservationPage() {
   }, [date])
 
   async function onSubmit(e: React.FormEvent) {
-    e.preventDefault()
-    setSubmitting(true)
-    setError(null)
+  e.preventDefault()
+
+  if (phone) {
+    if (phone.startsWith('-')) {
+      setError('Phone number cannot be negative')
+      return
+    }
+    if (!/^\d+$/.test(phone)) {
+      setError('Phone number must contain only digits')
+      return
+    }
+  }
+
+  setSubmitting(true)
+  setError(null)
     try {
       const r = await fetch('/api/reservations', {
         method: 'POST',
@@ -154,9 +166,27 @@ export default function ReservationPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium">Phone (optional)</label>
-                  <input className="mt-1 w-full rounded-xl border px-3 h-11"
-                         value={phone} onChange={(e) => setPhone(e.target.value)} />
+                  <label className="block text-sm font-medium">Phone </label>
+                  <input
+                  type="tel"
+  inputMode="numeric"
+  pattern="[0-9]*"
+  className="mt-1 w-full rounded-xl border px-3 h-11"
+  value={phone}
+  onChange={(e) => {
+    const v = e.target.value
+    if (v.startsWith('-')) {
+      setError('Phone number cannot be negative')
+      return
+    }
+    if (!/^\d*$/.test(v)) {
+      setError('Phone number must contain only digits')
+      return
+    }
+    setError(null)
+    setPhone(v)
+  }}
+/>
                 </div>
               </div>
 
