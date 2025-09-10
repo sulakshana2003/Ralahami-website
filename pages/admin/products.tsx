@@ -193,6 +193,7 @@ export default function AdminProductsPage() {
       slug: f.slug.trim(),
       description: f.description.trim() || undefined,
       images: toArrayByLine(f.imagesText),
+      stock: Math.max(0, Number(f.stock || 0)),
       price: Number(f.price || 0),
       promotion: Number(f.promotion || 0),
       category: f.category.trim() || undefined,
@@ -298,6 +299,16 @@ export default function AdminProductsPage() {
             value={category}
             onChange={(e) => { setCategory(e.target.value); setPage(1); }}
           />
+          <TextInput
+          placeholder="Stock"
+          type="number"
+          min="0"   // ✅ prevent typing negatives
+          value={f.stock}
+          onChange={(e) => {
+            const val = Number(e.target.value);
+            setF({ ...f, stock: val < 0 ? "0" : e.target.value }); // ✅ auto-fix negatives
+            }}
+/>
           <label className="flex items-center gap-2 text-sm">
             <input
               type="checkbox"
