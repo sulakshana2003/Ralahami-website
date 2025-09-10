@@ -10,8 +10,8 @@ const createSchema = z.object({
   name: z.string().min(1),
   email: z.string().email(),
   phone: z.string()
-  .regex(/^\d+$/, { message: "Phone number must contain only digits" }) // ✅ only digits allowed
-  .refine((val) => !val.startsWith("-"), { message: "Phone number cannot be negative" }) // ✅ block negatives
+  .regex(/^\d+$/, { message: "Phone number must contain only digits" })
+  .refine((val) => !val.startsWith("-"), { message: "Phone number cannot be negative" })
   .optional(),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),  // yyyy-mm-dd
   time: z.string().regex(/^\d{2}:\d{2}$/),       // HH:mm
