@@ -297,9 +297,9 @@ export default function AdminUsersPage() {
                         </td> */}
                         <td className="px-4 py-4">
                           <div className="flex flex-wrap gap-2">
-                            <IconButton onClick={() => toggleActive(u._id, u.isActive)}>
+                            {/* <IconButton onClick={() => toggleActive(u._id, u.isActive)}>
                               {u.isActive ? "Block" : "Unblock"}
-                            </IconButton>
+                            </IconButton> */}
                             <IconButton onClick={() => resetPassword(u._id)}>Reset Password</IconButton>
                             <IconButton className="border-rose-200 hover:bg-rose-50" onClick={() => remove(u._id)}>
                               Delete
@@ -347,9 +347,9 @@ export default function AdminUsersPage() {
                         <option value="admin">admin</option>
                       </Select>
                       <div className="flex flex-wrap gap-2">
-                        <IconButton onClick={() => toggleActive(u._id, u.isActive)}>
+                        {/* <IconButton onClick={() => toggleActive(u._id, u.isActive)}>
                           {u.isActive ? "Block" : "Unblock"}
-                        </IconButton>
+                        </IconButton> */}
                         <IconButton onClick={() => resetPassword(u._id)}>Reset</IconButton>
                         <IconButton className="border-rose-200 hover:bg-rose-50" onClick={() => remove(u._id)}>
                           Delete
