@@ -259,7 +259,7 @@ export default function AdminUsersPage() {
                   <th className="px-4 py-3 font-medium text-neutral-600">Name</th>
                   <th className="px-4 py-3 font-medium text-neutral-600">Email</th>
                   <th className="px-4 py-3 font-medium text-neutral-600">Role</th>
-                  <th className="px-4 py-3 font-medium text-neutral-600">Status</th>
+                 {/*  <th className="px-4 py-3 font-medium text-neutral-600">Status</th> */}
                   <th className="px-4 py-3 font-medium text-neutral-600">Actions</th>
                 </tr>
               </thead>
@@ -292,9 +292,9 @@ export default function AdminUsersPage() {
                             <option value="admin">admin</option>
                           </Select>
                         </td>
-                        <td className="px-4 py-4">
+                        {/* <td className="px-4 py-4">
                           {u.isActive ? <Badge tone="success">active</Badge> : <Badge tone="danger">blocked</Badge>}
-                        </td>
+                        </td> */}
                         <td className="px-4 py-4">
                           <div className="flex flex-wrap gap-2">
                             <IconButton onClick={() => toggleActive(u._id, u.isActive)}>
