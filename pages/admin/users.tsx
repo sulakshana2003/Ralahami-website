@@ -1,7 +1,9 @@
 
+// pages/admin/users.tsx
 import { useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 import { useSession, signIn, signOut } from "next-auth/react";
+import AdminLayout from "../components/AdminLayout";
 
 // ---------- small utils ----------
 const fetcher = (url: string) =>
@@ -30,7 +32,7 @@ type UserItem = {
   updatedAt: string;
 };
 
-// ---------- subcomponents ----------
+// ---------- subcomponents (UI only) ----------
 function Badge({ children, tone = "muted" }: { children: React.ReactNode; tone?: "success" | "danger" | "muted" }) {
   const tones: Record<string, string> = {
     success: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
@@ -57,7 +59,7 @@ function PrimaryButton(props: React.ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <button
       {...props}
-      className={`rounded-xl bg-black px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-neutral-800 active:scale-[.98] transition ${props.className || ""}`}
+      className={`rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 active:scale-[.98] transition ${props.className || ""}`}
     />
   );
 }
@@ -66,7 +68,7 @@ function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       {...props}
-      className={`h-11 w-full rounded-xl border border-neutral-300 bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-black/10 ${props.className || ""}`}
+      className={`h-11 w-full rounded-xl border border-neutral-300 bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-indigo-200 ${props.className || ""}`}
     />
   );
 }
@@ -75,7 +77,7 @@ function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select
       {...props}
-      className={`h-11 w-full rounded-xl border border-neutral-300 bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-black/10 ${props.className || ""}`}
+      className={`h-11 w-full rounded-xl border border-neutral-300 bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-indigo-200 ${props.className || ""}`}
     />
   );
 }
@@ -124,7 +126,7 @@ function SkeletonRow() {
 }
 
 // ---------- main page ----------
-export default function AdminUsersPage() {
+function AdminUsersPageInner() {
   const { status } = useSession();
   const [q, setQ] = useState("");
   const debouncedQ = useDebounced(q);
@@ -216,51 +218,51 @@ export default function AdminUsersPage() {
   }
 
   return (
-    <div className="min-h-screen bg-neutral-50">
-      {/* Top bar */}
-      <header className="sticky top-0 z-40 border-b border-neutral-200 bg-white/80 backdrop-blur">
-        <div className="mx-auto flex max-w-7xl items-center justify-between px-4 py-4 sm:px-6 lg:px-8">
-          <h1 className="text-lg font-semibold">Admin • User Management</h1>
-          <div className="flex items-center gap-2">
-            <PrimaryButton onClick={() => setCreateOpen(true)}>+ New User</PrimaryButton>
-            <button
-              onClick={() => signOut({ callbackUrl: "/" })}
-              className="rounded-xl border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-neutral-700 shadow-sm hover:bg-neutral-50 active:scale-[.98] transition"
-            >
-              Logout
-            </button>
-          </div>
+    <>
+      {/* Page header row (inside the content surface from the layout) */}
+      <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4">
+        <div>
+          <h1 className="text-base font-semibold">User Management</h1>
+          <p className="text-xs text-neutral-500">Manage roles, passwords and accounts</p>
         </div>
-      </header>
-
-      {/* Content */}
-      <main className="mx-auto w-full max-w-7xl px-4 py-6 sm:px-6 lg:px-8">
-        {/* Controls */}
-        <div className="mb-4 grid gap-3 sm:grid-cols-2">
-          <TextInput
-            placeholder="Search by name or email…"
-            value={q}
-            onChange={(e) => {
-              setQ(e.target.value);
-              setPage(1);
-            }}
-          />
-          <div className="flex items-center gap-2">
-            <IconButton onClick={() => mutate()}>Refresh</IconButton>
-          </div>
+        <div className="flex items-center gap-2">
+          <PrimaryButton onClick={() => setCreateOpen(true)}>+ New User</PrimaryButton>
+          <button
+            onClick={() => signOut({ callbackUrl: "/" })}
+            className="rounded-xl border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-neutral-700 shadow-sm hover:bg-neutral-50 active:scale-[.98] transition"
+          >
+            Logout
+          </button>
         </div>
+      </div>
 
-        {/* Table / Cards */}
+      {/* Controls */}
+      <div className="grid gap-3 border-b border-neutral-100 px-5 py-4 sm:grid-cols-2">
+        <TextInput
+          placeholder="Search by name or email…"
+          value={q}
+          onChange={(e) => {
+            setQ(e.target.value);
+            setPage(1);
+          }}
+        />
+        <div className="flex items-center gap-2">
+          <IconButton onClick={() => mutate()}>Refresh</IconButton>
+        </div>
+      </div>
+
+      {/* Table / Cards */}
+      <div className="p-3">
         <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm">
           <div className="hidden md:block">
             <table className="w-full border-collapse">
-              <thead className="bg-neutral-50 text-left text-sm">
+              <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-600">
                 <tr>
-                  <th className="px-4 py-3 font-medium text-neutral-600">Name</th>
-                  <th className="px-4 py-3 font-medium text-neutral-600">Email</th>
-                  <th className="px-4 py-3 font-medium text-neutral-600">Role</th>
-                 {/*  <th className="px-4 py-3 font-medium text-neutral-600">Status</th> */}
-                  <th className="px-4 py-3 font-medium text-neutral-600">Actions</th>
+                  <th className="px-4 py-3 font-medium">Name</th>
+                  <th className="px-4 py-3 font-medium">Email</th>
+                  <th className="px-4 py-3 font-medium">Role</th>
+                  {/* <th className="px-4 py-3 font-medium">Status</th> */}
+                  <th className="px-4 py-3 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
@@ -362,7 +364,7 @@ export default function AdminUsersPage() {
         </div>
 
         {/* Pagination */}
-        <div className="mt-4 flex items-center justify-between">
+        <div className="mt-4 flex items-center justify-between px-2">
           <p className="text-sm text-neutral-500">
             Page <span className="font-medium text-neutral-800">{page}</span> of{" "}
             <span className="font-medium text-neutral-800">{pages}</span>
@@ -376,7 +378,7 @@ export default function AdminUsersPage() {
             </IconButton>
           </div>
         </div>
-      </main>
+      </div>
 
       {/* Create Modal */}
       <Modal
@@ -417,6 +419,14 @@ export default function AdminUsersPage() {
           </Select>
         </div>
       </Modal>
-    </div>
+    </>
+  );
+}
+
+export default function UsersPage() {
+  return (
+    <AdminLayout>
+      <AdminUsersPageInner />
+    </AdminLayout>
   );
 }
