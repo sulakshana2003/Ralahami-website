@@ -5,6 +5,8 @@ import type { GetServerSideProps } from 'next'
 import { dbConnect } from '@/lib/db'
 import Product from '@/models/Product'
 import AddToCartButton from "@/src/components/AddToCartButton";
+import Navbar from '../components/Navbar'
+import Footer from '../components/Footer'
 
 
 //import AddToCartButton from '@/components/AddToCartButton'
@@ -36,6 +38,7 @@ const ProductDetailPage: React.FC<Props> = ({ product }) => {
   return (
     <>
       <Head><title>{product.name} — Ralahami</title></Head>
+      <Navbar/>
       <div className="pt-28 pb-16">
         <div className="grid gap-10 lg:grid-cols-2">
           <div className="relative aspect-[4/3] overflow-hidden rounded-2xl border border-neutral-200">
@@ -81,6 +84,7 @@ const ProductDetailPage: React.FC<Props> = ({ product }) => {
           </div>
         </div>
       </div>
+      <Footer/>
     </>
   )
 }

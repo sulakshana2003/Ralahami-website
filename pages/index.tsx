@@ -200,9 +200,9 @@ const SignatureDishes: React.FC = () => (
                 <h3 className="text-base font-semibold">{d.title}</h3>
                 {d.price && <p className="mt-1 text-sm text-neutral-600">{d.price}</p>}
                 <div className="mt-4 flex items-center gap-2">
-                  <Link href="/products" className="rounded-full border border-neutral-300 px-3 py-1.5 text-xs font-medium hover:bg-neutral-50">
+                  {/* <Link href="/products" className="rounded-full border border-neutral-300 px-3 py-1.5 text-xs font-medium hover:bg-neutral-50">
                     Add to Cart
-                  </Link>
+                  </Link> */}
                   <Link href="/products" className="text-xs text-neutral-600 hover:text-black">See details →</Link>
                 </div>
               </div>
