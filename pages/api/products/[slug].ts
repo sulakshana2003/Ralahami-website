@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { dbConnect } from '@/lib/db'
 import Product from '@/models/Product'
