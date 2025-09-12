@@ -1,3 +1,4 @@
+/* eslint-disable @next/next/no-html-link-for-pages */
 // /pages/admin/index.tsx
 import { signOut } from "next-auth/react";
 
@@ -18,6 +19,12 @@ export default function AdminMenu() {
             className="rounded-xl border border-neutral-200 px-4 py-3 text-sm hover:bg-neutral-50 text-center"
           >
             Product Management
+          </a>
+          <a
+            href="/admin/finance"
+            className="rounded-xl border border-neutral-200 px-4 py-3 text-sm hover:bg-neutral-50 text-center"
+          >
+            Finance Management
           </a>
           <button
             onClick={() => signOut({ callbackUrl: "/" })}
