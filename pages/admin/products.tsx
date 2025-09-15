@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // pages/admin/products.tsx
 import { useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
