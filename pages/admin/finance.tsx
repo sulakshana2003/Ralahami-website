@@ -1,9 +1,11 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import useSWR from "swr";
 import { useState } from "react";
+import DashboardLayout from "../components/DashboardLayout";
 
-// ---------- Helpers ----------
+// ---------- helpers ----------
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
 const fmt = new Intl.NumberFormat("en-LK", {
   style: "currency",
@@ -12,36 +14,86 @@ const fmt = new Intl.NumberFormat("en-LK", {
 const today = (shift = 0) => {
   const d = new Date();
   d.setDate(d.getDate() + shift);
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${mm}-${dd}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
+    2,
+    "0"
+  )}-${String(d.getDate()).padStart(2, "0")}`;
 };
 
-const cls = {
-  input:
-    "w-full rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10",
-  btn: "rounded-xl bg-black px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-black/90 active:scale-[.98]",
-  btnGhost:
-    "rounded-xl border border-neutral-300 bg-white px-3 py-2 text-sm hover:bg-neutral-50",
-  card: "rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm",
-};
+// ---------- small UI ----------
+function Button({
+  children,
+  tone = "primary",
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  tone?: "primary" | "danger" | "ghost";
+}) {
+  const map = {
+    primary: "bg-indigo-600 text-white hover:bg-indigo-700",
+    ghost:
+      "bg-white border border-neutral-300 text-neutral-700 hover:bg-neutral-50",
+    danger: "bg-white border border-rose-300 text-rose-600 hover:bg-rose-50",
+  };
+  return (
+    <button
+      {...props}
+      className={`px-4 py-2 rounded-lg text-sm font-medium shadow-sm transition active:scale-[.98] ${
+        map[tone]
+      } ${props.className || ""}`}
+    >
+      {children}
+    </button>
+  );
+}
+function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input
+      {...props}
+      className={`w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-200 ${
+        props.className || ""
+      }`}
+    />
+  );
+}
+function StatCard({ title, value }: { title: string; value: string | number }) {
+  return (
+    <div className="bg-white rounded-xl shadow p-4">
+      <div className="text-sm text-neutral-500">{title}</div>
+      <div className="text-2xl font-bold mt-1">{value}</div>
+    </div>
+  );
+}
+function Section({
+  title,
+  children,
+}: {
+  title: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="mt-8">
+      <h2 className="mb-3 text-lg font-semibold">{title}</h2>
+      <div className="bg-white rounded-xl shadow p-4 overflow-x-auto">
+        {children}
+      </div>
+    </section>
+  );
+}
 
-// ---------- Types ----------
+// ---------- types ----------
 type Summary = {
   netProfit: number;
-  online: { revenue: number; cost: number; profit: number };
-  reservations: { revenue: number; profit: number };
+  online: { revenue: number; profit: number };
+  reservations: { revenue: number };
   payroll: { outflow: number };
-  inventory: { purchases: number; cogsApprox: number };
+  inventory: { purchases: number };
 };
-
 type OnlineOrder = {
   _id: string;
   date: string;
   orderId: string;
   revenue: number;
   cost: number;
-  note?: string;
 };
 type Reservation = {
   _id: string;
@@ -59,7 +111,6 @@ type Payroll = {
   employeeId: string;
   type: string;
   amount: number;
-  note?: string;
 };
 type InventoryItem = {
   _id: string;
@@ -67,7 +118,6 @@ type InventoryItem = {
   unit: string;
   unitCost: number;
   stockQty: number;
-  reorderLevel: number;
 };
 type InventoryMove = {
   _id: string;
@@ -83,12 +133,11 @@ type Product = {
   name: string;
   category?: string;
   price: number;
-  promotion?: number;
   stock: number;
   isAvailable: boolean;
 };
 
-// ---------- Main ----------
+// ---------- main ----------
 export default function FinanceAdminPage() {
   const [tab, setTab] = useState<
     | "dashboard"
@@ -100,9 +149,9 @@ export default function FinanceAdminPage() {
     | "reports"
   >("dashboard");
   const [from, setFrom] = useState(today(-7));
-  const [to, setTo] = useState(today(0));
+  const [to, setTo] = useState(today());
 
-  // SWR data
+  // SWR
   const { data: summary } = useSWR<Summary>(
     `/api/finance/summary?from=${from}&to=${to}`,
     fetcher
@@ -111,13 +160,16 @@ export default function FinanceAdminPage() {
     `/api/orders?from=${from}&to=${to}`,
     fetcher
   );
-  const { data: reservations, mutate: refetchRes } = useSWR<Reservation[]>(
+  const { data: reservations } = useSWR<Reservation[]>(
     `/api/reservations/reservations?from=${from}&to=${to}`,
     fetcher
   );
-  const { data: employees } = useSWR<Employee[]>("/api/employees", fetcher);
+  const { data: employees } = useSWR<Employee[]>(
+    "/api/Employee/employees",
+    fetcher
+  );
   const { data: payroll } = useSWR<Payroll[]>(
-    `/api/payroll?from=${from}&to=${to}`,
+    `/api/Employee/payroll?from=${from}&to=${to}`,
     fetcher
   );
   const { data: items } = useSWR<InventoryItem[]>(
@@ -133,7 +185,7 @@ export default function FinanceAdminPage() {
     fetcher
   );
 
-  // ---------- Actions ----------
+  // actions
   async function addOrder(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
@@ -144,12 +196,11 @@ export default function FinanceAdminPage() {
       cost: +(fd.get("cost") || 0),
       note: fd.get("note"),
     };
-    const r = await fetch("/api/orders", {
+    await fetch("/api/orders", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    if (!r.ok) return alert(await r.text());
     e.currentTarget.reset();
     refetchOrders();
   }
@@ -160,60 +211,33 @@ export default function FinanceAdminPage() {
       name: fd.get("name"),
       slug: fd.get("slug"),
       price: +(fd.get("price") || 0),
-      promotion: +(fd.get("promotion") || 0),
       stock: +(fd.get("stock") || 0),
-      isAvailable: fd.get("isAvailable") === "on",
       category: fd.get("category"),
+      isAvailable: fd.get("isAvailable") === "on",
     };
-    const r = await fetch("/api/products", {
+    await fetch("/api/products", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
-    if (!r.ok) return alert(await r.text());
     e.currentTarget.reset();
     refetchProducts();
   }
   async function deleteProduct(id: string) {
-    if (confirm("Delete?")) {
-      await fetch(`/api/products?id=${id}`, { method: "DELETE" });
-      refetchProducts();
-    }
+    if (!confirm("Delete product?")) return;
+    await fetch(`/api/products?id=${id}`, { method: "DELETE" });
+    refetchProducts();
   }
-
   function downloadCSV() {
     window.open(`/api/finance/report?from=${from}&to=${to}`, "_blank");
   }
 
-  // ---------- UI ----------
-  const TabBtn = ({ id, label }: { id: any; label: string }) => (
-    <button
-      onClick={() => setTab(id)}
-      className={`px-4 py-2 rounded-xl text-sm ${
-        tab === id ? "bg-black text-white" : "bg-white border"
-      }`}
-    >
-      {label}
-    </button>
-  );
-  const Section = ({ title, children }: { title: string; children: any }) => (
-    <section className="mt-6">
-      <div className="mb-2 font-semibold">{title}</div>
-      <div className={cls.card}>{children}</div>
-    </section>
-  );
-  const Stat = ({ title, value }: { title: string; value: string }) => (
-    <div className={cls.card}>
-      <div className="text-sm text-neutral-500">{title}</div>
-      <div className="text-xl font-bold">{value}</div>
-    </div>
-  );
-
   return (
-    <div className="mx-auto max-w-7xl p-4 sm:p-8">
-      <header className="mb-6 flex flex-col sm:flex-row justify-between">
-        <h1 className="text-2xl font-bold">Financial Management Admin</h1>
-        <div className="flex gap-2 flex-wrap">
+    <DashboardLayout>
+      {/* Header */}
+      <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center">
+        <h1 className="text-2xl font-bold">Financial Management</h1>
+        <div className="flex gap-2 flex-wrap mt-3 sm:mt-0">
           {[
             "dashboard",
             "revenues",
@@ -223,53 +247,63 @@ export default function FinanceAdminPage() {
             "products",
             "reports",
           ].map((t) => (
-            <TabBtn key={t} id={t} label={t} />
+            <Button
+              key={t}
+              tone={tab === t ? "primary" : "ghost"}
+              onClick={() => setTab(t as any)}
+            >
+              {t}
+            </Button>
           ))}
         </div>
-      </header>
+      </div>
 
-      <div className={cls.card}>
-        <label>From</label>
-        <input
+      {/* Filters */}
+      <div className="bg-white rounded-xl shadow p-4 flex items-center gap-3 mb-8">
+        <label className="text-sm">From</label>
+        <Input
           type="date"
           value={from}
           onChange={(e) => setFrom(e.target.value)}
-          className={cls.input + " w-40"}
+          className="w-[160px]"
         />
-        <label className="ml-2">To</label>
-        <input
+        <label className="text-sm">To</label>
+        <Input
           type="date"
           value={to}
           onChange={(e) => setTo(e.target.value)}
-          className={cls.input + " w-40"}
+          className="w-[160px]"
         />
       </div>
 
       {/* Dashboard */}
       {tab === "dashboard" && summary && (
         <Section title="Summary">
-          <div className="grid sm:grid-cols-2 lg:grid-cols-3 gap-3">
-            <Stat
+          <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+            <StatCard
               title="Online Revenue"
               value={fmt.format(summary.online.revenue)}
             />
-            <Stat
+            <StatCard
               title="Online Profit"
               value={fmt.format(summary.online.profit)}
             />
-            <Stat
+            <StatCard
               title="Reservation Revenue"
               value={fmt.format(summary.reservations.revenue)}
             />
-            <Stat
+            <StatCard
               title="Payroll Outflow"
               value={fmt.format(summary.payroll.outflow)}
             />
-            <Stat
+            <StatCard
               title="Inventory Purchases"
               value={fmt.format(summary.inventory.purchases)}
             />
-            <Stat title="Net Profit" value={fmt.format(summary.netProfit)} />
+            <StatCard
+              title="Net Profit"
+              value={fmt.format(summary.netProfit)}
+            />
           </div>
         </Section>
       )}
@@ -278,57 +312,42 @@ export default function FinanceAdminPage() {
       {tab === "revenues" && (
         <>
           <Section title="Add Online Order">
-            <form onSubmit={addOrder} className="grid sm:grid-cols-6 gap-2">
-              <input
-                name="date"
-                type="date"
-                defaultValue={to}
-                className={cls.input}
-              />
-              <input
-                name="orderId"
-                placeholder="Order ID"
-                className={cls.input}
-              />
-              <input
-                name="revenue"
-                placeholder="Revenue"
-                className={cls.input}
-                type="number"
-              />
-              <input
-                name="cost"
-                placeholder="Cost"
-                className={cls.input}
-                type="number"
-              />
-              <input
-                name="note"
-                placeholder="Note"
-                className={cls.input + " sm:col-span-2"}
-              />
-              <button className={cls.btn}>Add</button>
+            <form onSubmit={addOrder} className="grid sm:grid-cols-6 gap-3">
+              <Input type="date" name="date" defaultValue={to} />
+              <Input name="orderId" placeholder="Order ID" />
+              <Input type="number" name="revenue" placeholder="Revenue" />
+              <Input type="number" name="cost" placeholder="Cost" />
+              <Input name="note" placeholder="Note" className="sm:col-span-2" />
+              <Button>Add</Button>
             </form>
           </Section>
           <Section title="Orders">
             <table className="w-full text-sm">
-              <thead>
+              <thead className="bg-neutral-50">
                 <tr>
                   <th>Date</th>
                   <th>Order</th>
-                  <th>Rev</th>
+                  <th>Revenue</th>
                   <th>Cost</th>
                   <th>Profit</th>
                 </tr>
               </thead>
               <tbody>
                 {(orders || []).map((o) => (
-                  <tr key={o._id}>
-                    <td>{o.date}</td>
+                  <tr key={o._id} className="border-t">
+                    <td className="py-2">{o.date}</td>
                     <td>{o.orderId}</td>
                     <td>{fmt.format(o.revenue)}</td>
                     <td>{fmt.format(o.cost)}</td>
-                    <td>{fmt.format(o.revenue - o.cost)}</td>
+                    <td
+                      className={
+                        o.revenue - o.cost >= 0
+                          ? "text-green-600"
+                          : "text-red-600"
+                      }
+                    >
+                      {fmt.format(o.revenue - o.cost)}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -341,7 +360,7 @@ export default function FinanceAdminPage() {
       {tab === "reservations" && (
         <Section title="Reservations">
           <table className="w-full text-sm">
-            <thead>
+            <thead className="bg-neutral-50">
               <tr>
                 <th>Date</th>
                 <th>Slot</th>
@@ -353,8 +372,8 @@ export default function FinanceAdminPage() {
             </thead>
             <tbody>
               {(reservations || []).map((r) => (
-                <tr key={r._id}>
-                  <td>{r.date}</td>
+                <tr key={r._id} className="border-t">
+                  <td className="py-2">{r.date}</td>
                   <td>{r.slot}</td>
                   <td>{r.name}</td>
                   <td>{r.partySize}</td>
@@ -372,7 +391,7 @@ export default function FinanceAdminPage() {
         <>
           <Section title="Items">
             <table className="w-full text-sm">
-              <thead>
+              <thead className="bg-neutral-50">
                 <tr>
                   <th>Name</th>
                   <th>Unit</th>
@@ -382,8 +401,8 @@ export default function FinanceAdminPage() {
               </thead>
               <tbody>
                 {(items || []).map((i) => (
-                  <tr key={i._id}>
-                    <td>{i.name}</td>
+                  <tr key={i._id} className="border-t">
+                    <td className="py-2">{i.name}</td>
                     <td>{i.unit}</td>
                     <td>{fmt.format(i.unitCost)}</td>
                     <td>{i.stockQty}</td>
@@ -394,27 +413,27 @@ export default function FinanceAdminPage() {
           </Section>
           <Section title="Movements">
             <table className="w-full text-sm">
-              <thead>
+              <thead className="bg-neutral-50">
                 <tr>
                   <th>Date</th>
                   <th>Item</th>
                   <th>Type</th>
                   <th>Qty</th>
-                  <th>Cost</th>
+                  <th>Unit Cost</th>
                   <th>Note</th>
                 </tr>
               </thead>
               <tbody>
                 {(moves || []).map((m) => (
-                  <tr key={m._id}>
-                    <td>{m.date}</td>
+                  <tr key={m._id} className="border-t">
+                    <td className="py-2">{m.date}</td>
                     <td>
                       {items?.find((i) => i._id === m.itemId)?.name || m.itemId}
                     </td>
                     <td>{m.type}</td>
                     <td>{m.qty}</td>
-                    <td>{m.unitCost || "-"}</td>
-                    <td>{m.note}</td>
+                    <td>{m.unitCost ? fmt.format(m.unitCost) : "-"}</td>
+                    <td>{m.note || "-"}</td>
                   </tr>
                 ))}
               </tbody>
@@ -428,7 +447,7 @@ export default function FinanceAdminPage() {
         <>
           <Section title="Employees">
             <table className="w-full text-sm">
-              <thead>
+              <thead className="bg-neutral-50">
                 <tr>
                   <th>Name</th>
                   <th>Role</th>
@@ -437,8 +456,8 @@ export default function FinanceAdminPage() {
               </thead>
               <tbody>
                 {(employees || []).map((e) => (
-                  <tr key={e._id}>
-                    <td>{e.name}</td>
+                  <tr key={e._id} className="border-t">
+                    <td className="py-2">{e.name}</td>
                     <td>{e.role}</td>
                     <td>{fmt.format(e.baseSalary)}</td>
                   </tr>
@@ -448,25 +467,26 @@ export default function FinanceAdminPage() {
           </Section>
           <Section title="Payroll">
             <table className="w-full text-sm">
-              <thead>
+              <thead className="bg-neutral-50">
                 <tr>
                   <th>Date</th>
-                  <th>Emp</th>
+                  <th>Employee</th>
                   <th>Type</th>
                   <th>Amount</th>
                 </tr>
               </thead>
               <tbody>
-                {(payroll || []).map((p) => (
-                  <tr key={p._id}>
-                    <td>{p.date}</td>
-                    <td>
-                      {employees?.find((e) => e._id === p.employeeId)?.name}
-                    </td>
-                    <td>{p.type}</td>
-                    <td>{fmt.format(p.amount)}</td>
-                  </tr>
-                ))}
+                {(payroll || []).map((p) => {
+                  const emp = employees?.find((e) => e._id === p.employeeId);
+                  return (
+                    <tr key={p._id} className="border-t">
+                      <td className="py-2">{p.date}</td>
+                      <td>{emp?.name || p.employeeId}</td>
+                      <td>{p.type}</td>
+                      <td>{fmt.format(p.amount)}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </Section>
@@ -477,65 +497,45 @@ export default function FinanceAdminPage() {
       {tab === "products" && (
         <>
           <Section title="Add Product">
-            <form onSubmit={addProduct} className="grid sm:grid-cols-6 gap-2">
-              <input name="name" placeholder="Name" className={cls.input} />
-              <input name="slug" placeholder="Slug" className={cls.input} />
-              <input
-                name="category"
-                placeholder="Category"
-                className={cls.input}
-              />
-              <input
-                name="price"
-                type="number"
-                placeholder="Price"
-                className={cls.input}
-              />
-              <input
-                name="promotion"
-                type="number"
-                placeholder="Promotion"
-                className={cls.input}
-              />
-              <input
-                name="stock"
-                type="number"
-                placeholder="Stock"
-                className={cls.input}
-              />
-              <label>
+            <form onSubmit={addProduct} className="grid sm:grid-cols-6 gap-3">
+              <Input name="name" placeholder="Name" />
+              <Input name="slug" placeholder="Slug" />
+              <Input name="category" placeholder="Category" />
+              <Input type="number" name="price" placeholder="Price" />
+              <Input type="number" name="stock" placeholder="Stock" />
+              <label className="flex items-center gap-2">
                 <input type="checkbox" name="isAvailable" /> Available
               </label>
-              <button className={cls.btn}>Add</button>
+              <Button>Add</Button>
             </form>
           </Section>
           <Section title="Products">
             <table className="w-full text-sm">
-              <thead>
+              <thead className="bg-neutral-50">
                 <tr>
                   <th>Name</th>
                   <th>Category</th>
                   <th>Price</th>
                   <th>Stock</th>
-                  <th>Avail</th>
+                  <th>Available</th>
                   <th></th>
                 </tr>
               </thead>
               <tbody>
                 {(products || []).map((p) => (
-                  <tr key={p._id}>
-                    <td>{p.name}</td>
-                    <td>{p.category}</td>
+                  <tr key={p._id} className="border-t">
+                    <td className="py-2">{p.name}</td>
+                    <td>{p.category || "-"}</td>
                     <td>{fmt.format(p.price)}</td>
                     <td>{p.stock}</td>
                     <td>{p.isAvailable ? "Yes" : "No"}</td>
                     <td>
-                      <button
+                      <Button
+                        tone="danger"
                         onClick={() => deleteProduct(p._id)}
-                        className="text-red-600"
                       >
-                        Del
-                      </button>
+                        Delete
+                      </Button>
                     </td>
                   </tr>
                 ))}
@@ -548,11 +548,9 @@ export default function FinanceAdminPage() {
       {/* Reports */}
       {tab === "reports" && (
         <Section title="Reports">
-          <button onClick={downloadCSV} className={cls.btn}>
-            Download CSV
-          </button>
+          <Button onClick={downloadCSV}>Download CSV</Button>
         </Section>
       )}
-    </div>
+    </DashboardLayout>
   );
 }

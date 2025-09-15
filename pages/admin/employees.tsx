@@ -3,7 +3,90 @@
 
 import useSWR from "swr";
 import { useMemo, useState } from "react";
+import DashboardLayout from "../components/DashboardLayout";
 
+// ---------- utils ----------
+const fetcher = async (url: string) => {
+  const r = await fetch(url, { credentials: "same-origin" });
+  if (!r.ok) throw new Error(await r.text());
+  return r.json();
+};
+const fmt = new Intl.NumberFormat("en-LK", {
+  style: "currency",
+  currency: "LKR",
+  maximumFractionDigits: 2,
+});
+const today = () => {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
+    2,
+    "0"
+  )}-${String(d.getDate()).padStart(2, "0")}`;
+};
+const shift = (days: number) => {
+  const d = new Date();
+  d.setDate(d.getDate() + days);
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
+    2,
+    "0"
+  )}-${String(d.getDate()).padStart(2, "0")}`;
+};
+
+// ---------- UI atoms ----------
+function Button({
+  children,
+  tone = "primary",
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  tone?: "primary" | "ghost" | "danger";
+}) {
+  const map = {
+    primary: "bg-indigo-600 text-white hover:bg-indigo-700",
+    ghost:
+      "border border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50",
+    danger: "border border-rose-200 bg-white text-rose-600 hover:bg-rose-50",
+  };
+  return (
+    <button
+      {...props}
+      className={`px-4 py-2 rounded-lg text-sm font-medium shadow-sm active:scale-[.98] transition ${
+        map[tone]
+      } ${props.className || ""}`}
+    >
+      {children}
+    </button>
+  );
+}
+function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input
+      {...props}
+      className={`w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-200 ${
+        props.className || ""
+      }`}
+    />
+  );
+}
+function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <select
+      {...props}
+      className={`w-full rounded-lg border border-neutral-300 px-3 py-2 text-sm focus:ring-2 focus:ring-indigo-200 ${
+        props.className || ""
+      }`}
+    />
+  );
+}
+function StatCard({ title, value }: { title: string; value: string | number }) {
+  return (
+    <div className="bg-white rounded-xl shadow p-4">
+      <div className="text-sm text-neutral-500">{title}</div>
+      <div className="text-2xl font-bold mt-1">{value}</div>
+    </div>
+  );
+}
+
+// ---------- types ----------
 type Employee = { _id: string; name: string; role: string; baseSalary: number };
 type PayrollType = "salary" | "advance" | "bonus" | "deduction";
 type Payroll = {
@@ -15,43 +98,8 @@ type Payroll = {
   note?: string;
 };
 
-const fetcher = async (url: string) => {
-  const r = await fetch(url, { credentials: "same-origin" });
-  if (!r.ok) throw new Error(await r.text());
-  return r.json();
-};
-
-const cls = {
-  input:
-    "w-full rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm outline-none focus:ring-2 focus:ring-black/10",
-  btn: "rounded-xl bg-black px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-black/90 active:scale-[.98]",
-  btnGhost:
-    "rounded-xl border border-neutral-300 bg-white px-3 py-2 text-sm hover:bg-neutral-50",
-  card: "rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm",
-};
-
-const fmt = new Intl.NumberFormat("en-LK", {
-  style: "currency",
-  currency: "LKR",
-  maximumFractionDigits: 2,
-});
-
-const today = () => {
-  const d = new Date();
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${mm}-${dd}`;
-};
-const shift = (days: number) => {
-  const d = new Date();
-  d.setDate(d.getDate() + days);
-  const mm = String(d.getMonth() + 1).padStart(2, "0");
-  const dd = String(d.getDate()).padStart(2, "0");
-  return `${d.getFullYear()}-${mm}-${dd}`;
-};
-
+// ---------- main ----------
 export default function EmployeeAdminPage() {
-  // ✅ updated API paths
   const { data: employees, mutate: mutateEmp } = useSWR<Employee[]>(
     "/api/Employee/employees",
     fetcher
@@ -83,6 +131,7 @@ export default function EmployeeAdminPage() {
     return { outflow, salaries, advances, bonuses, deductions };
   }, [payroll]);
 
+  // --- actions ---
   async function seed() {
     if (!confirm("Reset & seed employees + payroll?")) return;
     const r = await fetch("/api/Employee/employees/seed", { method: "POST" });
@@ -91,29 +140,23 @@ export default function EmployeeAdminPage() {
     mutatePayroll();
     alert("Seeded!");
   }
-
   async function addEmployee(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const formEl = e.currentTarget; 
-    const fd = new FormData(formEl);
+    const fd = new FormData(e.currentTarget);
     const body = {
-      name: (fd.get("name") || "").toString().trim(),
-      role: (fd.get("role") || "").toString().trim(),
+      name: fd.get("name")?.toString().trim(),
+      role: fd.get("role")?.toString().trim(),
       baseSalary: Number(fd.get("baseSalary")),
     };
-    if (!body.name || !body.role || isNaN(body.baseSalary))
-      return alert("Fill all fields");
-    if (body.baseSalary < 0) return alert("Base salary must be positive");
     const r = await fetch("/api/Employee/employees", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
     if (!r.ok) return alert(await r.text());
-    formEl.reset(); 
+    e.currentTarget.reset();
     mutateEmp();
   }
-
   async function deleteEmployee(id: string) {
     if (!confirm("Delete this employee?")) return;
     const r = await fetch(`/api/Employee/employees?id=${id}`, {
@@ -122,11 +165,9 @@ export default function EmployeeAdminPage() {
     if (!r.ok) return alert(await r.text());
     mutateEmp();
   }
-
   async function recordPayroll(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
-    const formEl = e.currentTarget; 
-    const fd = new FormData(formEl);
+    const fd = new FormData(e.currentTarget);
     const body: any = {
       employeeId: fd.get("employeeId")?.toString(),
       type: fd.get("type")?.toString(),
@@ -134,100 +175,85 @@ export default function EmployeeAdminPage() {
       date: fd.get("date")?.toString(),
       note: fd.get("note")?.toString() || "",
     };
-    if (!body.employeeId || !body.type || !body.amount || !body.date)
-      return alert("Fill all fields");
-    if (body.amount <= 0) return alert("Amount must be positive");
     const r = await fetch("/api/Employee/payroll", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
     if (!r.ok) return alert(await r.text());
-    formEl.reset();
+    e.currentTarget.reset();
     mutatePayroll();
   }
 
   return (
-    <div className="mx-auto max-w-7xl p-4 sm:p-8">
-      <header className="mb-6 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <DashboardLayout>
+      {/* Header */}
+      <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold">Employee Admin</h1>
-          <p className="text-sm text-neutral-600">
-            Manage employees and record payroll transactions.
+          <h1 className="text-2xl font-bold">Employee Management</h1>
+          <p className="text-sm text-neutral-500">
+            Manage employees & payroll transactions
           </p>
         </div>
-        <div className="flex items-center gap-2">
-          <button onClick={seed} className={cls.btnGhost}>
-            Seed Dummy DB
-          </button>
-        </div>
-      </header>
+        <Button tone="ghost" onClick={seed}>
+          Seed Dummy DB
+        </Button>
+      </div>
 
       {/* Filters */}
-      <div className={cls.card}>
-        <div className="flex flex-wrap items-center gap-2">
-          <label className="text-sm text-neutral-600">From</label>
-          <input
-            type="date"
-            value={from}
-            onChange={(e) => setFrom(e.target.value)}
-            className={cls.input + " w-[160px]"}
-          />
-          <label className="ml-2 text-sm text-neutral-600">To</label>
-          <input
-            type="date"
-            value={to}
-            onChange={(e) => setTo(e.target.value)}
-            className={cls.input + " w-[160px]"}
-          />
-        </div>
+      <div className="bg-white rounded-xl shadow p-4 mb-8 flex flex-wrap gap-3 items-center">
+        <label className="text-sm text-neutral-600">From</label>
+        <Input
+          type="date"
+          value={from}
+          onChange={(e) => setFrom(e.target.value)}
+          className="w-[160px]"
+        />
+        <label className="text-sm text-neutral-600">To</label>
+        <Input
+          type="date"
+          value={to}
+          onChange={(e) => setTo(e.target.value)}
+          className="w-[160px]"
+        />
       </div>
 
       {/* Summary */}
-      <section className="mt-6">
-        <div className="mb-3 text-lg font-semibold">
-          Payroll Summary (selected range)
-        </div>
-        <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-          <Stat title="Total Outflow" value={fmt.format(totals.outflow)} />
-          <Stat title="Salaries" value={fmt.format(totals.salaries)} />
-          <Stat title="Advances" value={fmt.format(totals.advances)} />
-          <Stat title="Bonuses" value={fmt.format(totals.bonuses)} />
-          <Stat title="Deductions" value={fmt.format(totals.deductions)} />
-        </div>
-      </section>
+      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-5 mb-8">
+        <StatCard title="Total Outflow" value={fmt.format(totals.outflow)} />
+        <StatCard title="Salaries" value={fmt.format(totals.salaries)} />
+        <StatCard title="Advances" value={fmt.format(totals.advances)} />
+        <StatCard title="Bonuses" value={fmt.format(totals.bonuses)} />
+        <StatCard title="Deductions" value={fmt.format(totals.deductions)} />
+      </div>
 
       {/* Add Employee */}
-      <section className="mt-6">
+      <section className="mb-8">
         <div className="mb-3 text-lg font-semibold">Add Employee</div>
         <form
           onSubmit={addEmployee}
-          className={cls.card + " grid gap-2 sm:grid-cols-5"}
+          className="grid gap-3 sm:grid-cols-4 bg-white shadow rounded-xl p-4"
         >
-          <input name="name" placeholder="Full name" className={cls.input} />
-          <input
-            name="role"
-            placeholder="Role (e.g., Chef)"
-            className={cls.input}
-          />
-          <input
+          <Input name="name" placeholder="Full name" required />
+          <Input name="role" placeholder="Role (e.g., Chef)" required />
+          <Input
             name="baseSalary"
             placeholder="Base Salary (LKR)"
-            inputMode="numeric"
-            className={cls.input}
+            type="number"
+            required
           />
-          <button className={cls.btn + " sm:col-span-1"}>Add</button>
+          <Button>Add</Button>
         </form>
       </section>
 
       {/* Employee list */}
-      <section className="mt-6">
+      <section className="mb-8">
         <div className="mb-3 text-lg font-semibold">Employees</div>
-        <div className={cls.card}>
+        <div className="overflow-hidden rounded-xl border bg-white shadow">
           <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-neutral-500">
-                <th className="py-2">Name</th>
+            <thead className="bg-neutral-50 text-neutral-600">
+              <tr>
+                <th className="px-4 py-2 text-left">Name</th>
                 <th>Role</th>
                 <th>Base Salary</th>
                 <th></th>
@@ -236,22 +262,19 @@ export default function EmployeeAdminPage() {
             <tbody>
               {(employees || []).map((e) => (
                 <tr key={e._id} className="border-t">
-                  <td className="py-2">{e.name}</td>
+                  <td className="px-4 py-3">{e.name}</td>
                   <td>{e.role}</td>
                   <td>{fmt.format(e.baseSalary)}</td>
                   <td className="text-right">
-                    <button
-                      onClick={() => deleteEmployee(e._id)}
-                      className={cls.btnGhost}
-                    >
+                    <Button tone="danger" onClick={() => deleteEmployee(e._id)}>
                       Delete
-                    </button>
+                    </Button>
                   </td>
                 </tr>
               ))}
               {(employees || []).length === 0 && (
                 <tr>
-                  <td colSpan={4} className="py-2 text-neutral-500">
+                  <td colSpan={4} className="p-6 text-center text-neutral-500">
                     No employees yet
                   </td>
                 </tr>
@@ -262,59 +285,52 @@ export default function EmployeeAdminPage() {
       </section>
 
       {/* Record payroll */}
-      <section className="mt-6">
+      <section className="mb-8">
         <div className="mb-3 text-lg font-semibold">
           Record Payroll Transaction
         </div>
         <form
           onSubmit={recordPayroll}
-          className={cls.card + " grid gap-2 sm:grid-cols-6"}
+          className="grid gap-3 sm:grid-cols-6 bg-white shadow rounded-xl p-4"
         >
-          <input
-            name="date"
-            type="date"
-            defaultValue={today()}
-            className={cls.input}
-          />
-          <select name="employeeId" className={cls.input + " sm:col-span-2"}>
+          <Input type="date" name="date" defaultValue={today()} />
+          <Select name="employeeId" className="sm:col-span-2">
             <option value="">Select Employee</option>
             {(employees || []).map((e) => (
               <option key={e._id} value={e._id}>
                 {e.name} — {e.role}
               </option>
             ))}
-          </select>
-          <select name="type" className={cls.input}>
+          </Select>
+          <Select name="type">
             <option value="salary">Salary</option>
             <option value="advance">Advance</option>
             <option value="bonus">Bonus</option>
             <option value="deduction">Deduction</option>
-          </select>
-          <input
+          </Select>
+          <Input
             name="amount"
             placeholder="Amount (LKR)"
-            inputMode="numeric"
-            className={cls.input}
+            type="number"
+            required
           />
-          <input
+          <Input
             name="note"
             placeholder="Note (optional)"
-            className={cls.input + " sm:col-span-2"}
+            className="sm:col-span-2"
           />
-          <button className={cls.btn}>Add Payroll</button>
+          <Button>Record</Button>
         </form>
       </section>
 
-      {/* History */}
-      <section className="mt-6">
-        <div className="mb-3 text-lg font-semibold">
-          Payroll History (range)
-        </div>
-        <div className={cls.card}>
+      {/* Payroll history */}
+      <section>
+        <div className="mb-3 text-lg font-semibold">Payroll History</div>
+        <div className="overflow-hidden rounded-xl border bg-white shadow">
           <table className="w-full text-sm">
-            <thead>
-              <tr className="text-left text-neutral-500">
-                <th className="py-2">Date</th>
+            <thead className="bg-neutral-50 text-neutral-600">
+              <tr>
+                <th className="px-4 py-2">Date</th>
                 <th>Employee</th>
                 <th>Type</th>
                 <th>Amount</th>
@@ -329,7 +345,7 @@ export default function EmployeeAdminPage() {
                 const sign = p.type === "deduction" ? "-" : "";
                 return (
                   <tr key={p._id} className="border-t">
-                    <td className="py-2">{p.date}</td>
+                    <td className="px-4 py-3">{p.date}</td>
                     <td>{emp?.name || p.employeeId}</td>
                     <td>{p.type}</td>
                     <td
@@ -348,7 +364,7 @@ export default function EmployeeAdminPage() {
               })}
               {(payroll || []).length === 0 && (
                 <tr>
-                  <td className="py-2 text-neutral-500" colSpan={5}>
+                  <td colSpan={5} className="p-6 text-center text-neutral-500">
                     No transactions in range
                   </td>
                 </tr>
@@ -357,15 +373,6 @@ export default function EmployeeAdminPage() {
           </table>
         </div>
       </section>
-    </div>
-  );
-}
-
-function Stat({ title, value }: { title: string; value: string }) {
-  return (
-    <div className="rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm">
-      <div className="text-sm text-neutral-500">{title}</div>
-      <div className="mt-1 text-2xl font-semibold">{value}</div>
-    </div>
+    </DashboardLayout>
   );
 }
