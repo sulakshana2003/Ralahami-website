@@ -4,6 +4,7 @@
 import useSWR from "swr";
 import { useState } from "react";
 import DashboardLayout from "../components/DashboardLayout";
+import AdminGuard from "../components/AdminGuard";
 
 // ---------- helpers ----------
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
@@ -233,6 +234,7 @@ export default function FinanceAdminPage() {
   }
 
   return (
+    <AdminGuard>
     <DashboardLayout>
       {/* Header */}
       <div className="mb-6 flex flex-col sm:flex-row justify-between items-start sm:items-center">
@@ -552,5 +554,6 @@ export default function FinanceAdminPage() {
         </Section>
       )}
     </DashboardLayout>
+    </AdminGuard>
   );
 }

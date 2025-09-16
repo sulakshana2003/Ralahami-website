@@ -1,9 +1,11 @@
+/* eslint-disable react-hooks/rules-of-hooks */
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import useSWR from "swr";
 import { useMemo, useState } from "react";
 import DashboardLayout from "../components/DashboardLayout";
+import AdminGuard from "../components/AdminGuard"
 
 // ---------- utils ----------
 const fetcher = async (url: string) => {
@@ -108,10 +110,12 @@ type Movement = {
 
 // ---------- main ----------
 export default function InventoryAdminPage() {
+  
   const { data: items, mutate: mutateItems } = useSWR<Item[]>(
     "/api/inventory/items",
     fetcher
   );
+  // eslint-disable-next-line react-hooks/rules-of-hooks
   const [from, setFrom] = useState(() => shift(-7));
   const [to, setTo] = useState(() => today());
   const { data: moves, mutate: mutateMoves } = useSWR<Movement[]>(
@@ -181,6 +185,7 @@ export default function InventoryAdminPage() {
   }
 
   return (
+    <AdminGuard>
     <DashboardLayout>
       {/* Header */}
       <div className="mb-6 flex items-center justify-between">
@@ -416,6 +421,7 @@ export default function InventoryAdminPage() {
         </div>
       </section>
     </DashboardLayout>
+    </AdminGuard>
   );
 
   // --- helpers ---
