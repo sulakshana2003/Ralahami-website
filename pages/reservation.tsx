@@ -20,6 +20,12 @@ export default function ReservationPage() {
   const [partySize, setPartySize] = useState(2)
   const [time, setTime] = useState('')
   const [notes, setNotes] = useState('')
+
+  // 🆕 payment states
+  const [paymentMethod, setPaymentMethod] = useState('')
+  const [paymentStatus, setPaymentStatus] = useState<'pending' | 'paid' | 'unpaid'>('pending')
+  const [amount, setAmount] = useState<number | ''>('')
+
   const [submitting, setSubmitting] = useState(false)
   const [successId, setSuccessId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
@@ -48,26 +54,37 @@ export default function ReservationPage() {
   }, [date])
 
   async function onSubmit(e: React.FormEvent) {
-  e.preventDefault()
+    e.preventDefault()
 
-  if (phone) {
-    if (phone.startsWith('-')) {
-      setError('Phone number cannot be negative')
-      return
+    if (phone) {
+      if (phone.startsWith('-')) {
+        setError('Phone number cannot be negative')
+        return
+      }
+      if (!/^\d+$/.test(phone)) {
+        setError('Phone number must contain only digits')
+        return
+      }
     }
-    if (!/^\d+$/.test(phone)) {
-      setError('Phone number must contain only digits')
-      return
-    }
-  }
 
-  setSubmitting(true)
-  setError(null)
+    setSubmitting(true)
+    setError(null)
     try {
       const r = await fetch('/api/reservations', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ name, email, phone, date, time, partySize, notes }),
+        body: JSON.stringify({
+          name,
+          email,
+          phone,
+          date,
+          time,
+          partySize,
+          notes,
+          paymentMethod,
+          paymentStatus,
+          amount: amount === '' ? 0 : Number(amount)
+        }),
       })
       const j = await r.json()
       if (!r.ok) throw new Error(j?.message || 'Reservation failed')
@@ -85,24 +102,19 @@ export default function ReservationPage() {
       <Navbar />
 
       <div
-  className="relative pt-28 pb-16 min-h-screen bg-cover bg-center"
-  style={{ backgroundImage: "url('/images/reservation-bg.png')" }}
->
-  {/* dark overlay */}
-  <div className="absolute inset-0 bg-black/25" />
+        className="relative pt-28 pb-16 min-h-screen bg-cover bg-center"
+        style={{ backgroundImage: "url('/images/reservation-bg.png')" }}
+      >
+        <div className="absolute inset-0 bg-black/25" />
 
-  {/* content above overlay */}
-  <div className="relative mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8">
-    ...
-
+        <div className="relative mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8">
           <div className="mb-8 text-center bg-white/90 backdrop-blur rounded-xl p-6 shadow-lg mx-auto max-w-3xl">
-  <p className="text-xs tracking-[0.25em] text-amber-600 uppercase">Reservation</p>
-  <h1 className="mt-2 text-4xl font-semibold">Book a Table</h1>
-  <p className="mt-2 text-neutral-600">
-    Select a date & time, tell us your party size, and we’ll save your table!
-  </p>
-</div>
-
+            <p className="text-xs tracking-[0.25em] text-amber-600 uppercase">Reservation</p>
+            <h1 className="mt-2 text-4xl font-semibold">Book a Table</h1>
+            <p className="mt-2 text-neutral-600">
+              Select a date & time, tell us your party size, and we’ll save your table!
+            </p>
+          </div>
 
           {successId ? (
             <div className="rounded-2xl border border-green-200 bg-green-50 p-6">
@@ -117,10 +129,9 @@ export default function ReservationPage() {
             </div>
           ) : (
             <form
-  onSubmit={onSubmit}
-  className="grid gap-5 rounded-2xl border p-6 sm:grid-cols-2 bg-white/90 backdrop-blur shadow-xl"
->
-
+              onSubmit={onSubmit}
+              className="grid gap-5 rounded-2xl border p-6 sm:grid-cols-2 bg-white/90 backdrop-blur shadow-xl"
+            >
               {/* Left column */}
               <div className="space-y-4">
                 <div>
@@ -149,6 +160,16 @@ export default function ReservationPage() {
                          className="mt-1 w-full rounded-xl border px-3 h-11"
                          value={partySize} onChange={(e) => setPartySize(Number(e.target.value))} required />
                 </div>
+
+                {/* 🆕 Amount */}
+                <div>
+                  <label className="block text-sm font-medium">Amount (LKR)</label>
+                  <input type="number"
+                         className="mt-1 w-full rounded-xl border px-3 h-11"
+                         min={0}
+                         value={amount}
+                         onChange={(e) => setAmount(e.target.value === '' ? '' : Number(e.target.value))} />
+                </div>
               </div>
 
               {/* Right column */}
@@ -166,28 +187,57 @@ export default function ReservationPage() {
                 </div>
 
                 <div>
-                  <label className="block text-sm font-medium">Phone </label>
+                  <label className="block text-sm font-medium">Phone</label>
                   <input
-                  type="tel"
-  inputMode="numeric"
-  pattern="[0-9]*"
-  className="mt-1 w-full rounded-xl border px-3 h-11"
-  value={phone}
-  onChange={(e) => {
-    const v = e.target.value
-    if (v.startsWith('-')) {
-      setError('Phone number cannot be negative')
-      return
-    }
-    if (!/^\d*$/.test(v)) {
-      setError('Phone number must contain only digits')
-      return
-    }
-    setError(null)
-    setPhone(v)
-  }}
-/>
+                    type="tel"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    className="mt-1 w-full rounded-xl border px-3 h-11"
+                    value={phone}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      if (v.startsWith('-')) {
+                        setError('Phone number cannot be negative')
+                        return
+                      }
+                      if (!/^\d*$/.test(v)) {
+                        setError('Phone number must contain only digits')
+                        return
+                      }
+                      setError(null)
+                      setPhone(v)
+                    }}
+                  />
                 </div>
+
+                {/* 🆕 Payment Method */}
+                <div>
+                  <label className="block text-sm font-medium">Payment Method</label>
+                  <select
+                    className="mt-1 w-full rounded-xl border px-3 h-11"
+                    value={paymentMethod}
+                    onChange={(e) => setPaymentMethod(e.target.value)}
+                  >
+                    <option value="">Select method</option>
+                    <option value="cash">Cash</option>
+                    <option value="card">Card</option>
+                    <option value="online">Online</option>
+                  </select>
+                </div>
+
+                {/* 🆕 Payment Status */}
+                {/* <div>
+                  <label className="block text-sm font-medium">Payment Status</label>
+                  <select
+                    className="mt-1 w-full rounded-xl border px-3 h-11"
+                    value={paymentStatus}
+                    onChange={(e) => setPaymentStatus(e.target.value as any)}
+                  >
+                    <option value="pending">Pending</option>
+                    <option value="paid">Paid</option>
+                    <option value="unpaid">Unpaid</option>
+                  </select>
+                </div> */}
               </div>
 
               <div className="sm:col-span-2">

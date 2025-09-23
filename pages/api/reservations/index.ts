@@ -3,20 +3,31 @@ import { z } from 'zod'
 import { dbConnect } from '@/lib/db'
 import Reservation from '@/models/Reservation'
 import { generateSlotsForDate, normalizeSlot } from '@/lib/slots'
-import { CAPACITY_PER_SLOT, MAX_PARTY_SIZE, MIN_PARTY_SIZE, BLACKOUT_DATES } from '@/lib/reservationConfig'
+import {
+  CAPACITY_PER_SLOT,
+  MAX_PARTY_SIZE,
+  MIN_PARTY_SIZE,
+  BLACKOUT_DATES
+} from '@/lib/reservationConfig'
 
 // ---- Validation ----
 const createSchema = z.object({
   name: z.string().min(1),
   email: z.string().email(),
-  phone: z.string()
-  .regex(/^\d+$/, { message: "Phone number must contain only digits" })
-  .refine((val) => !val.startsWith("-"), { message: "Phone number cannot be negative" })
-  .optional(),
-  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),  // yyyy-mm-dd
-  time: z.string().regex(/^\d{2}:\d{2}$/),       // HH:mm
+  phone: z
+    .string()
+    .regex(/^\d+$/, { message: 'Phone number must contain only digits' })
+    .refine((val) => !val.startsWith('-'), { message: 'Phone number cannot be negative' })
+    .optional(),
+  date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/), // yyyy-mm-dd
+  time: z.string().regex(/^\d{2}:\d{2}$/), // HH:mm
   partySize: z.number().int().min(MIN_PARTY_SIZE).max(MAX_PARTY_SIZE),
-  notes: z.string().max(500).optional()
+  notes: z.string().max(500).optional(),
+
+  // 🆕 Payment fields
+  paymentStatus: z.enum(['pending', 'paid', 'unpaid']).default('pending'),
+  paymentMethod: z.enum(['cash', 'card', 'online']).optional(),
+  amount: z.number().min(0).optional()
 })
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
@@ -25,8 +36,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   if (req.method === 'GET') {
     // /api/reservations?date=yyyy-mm-dd
     const date = String(req.query.date || '')
-    if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return res.status(400).json({ message: 'Invalid date' })
-    if (BLACKOUT_DATES.has(date)) return res.status(200).json({ slots: [], capacity: CAPACITY_PER_SLOT })
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(date))
+      return res.status(400).json({ message: 'Invalid date' })
+    if (BLACKOUT_DATES.has(date))
+      return res.status(200).json({ slots: [], capacity: CAPACITY_PER_SLOT })
 
     const baseSlots = generateSlotsForDate(date)
     const counts = await Reservation.aggregate([
@@ -35,9 +48,9 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     ])
 
     const usedBySlot: Record<string, number> = {}
-    counts.forEach(c => (usedBySlot[c._id] = c.total))
+    counts.forEach((c) => (usedBySlot[c._id] = c.total))
 
-    const slots = baseSlots.map(s => ({
+    const slots = baseSlots.map((s) => ({
       time: s,
       remaining: Math.max(CAPACITY_PER_SLOT - (usedBySlot[s] || 0), 0)
     }))
@@ -50,7 +63,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const body = createSchema.parse(req.body)
       const slot = normalizeSlot(body.time)
 
-      if (BLACKOUT_DATES.has(body.date)) return res.status(400).json({ message: 'Date not bookable' })
+      if (BLACKOUT_DATES.has(body.date))
+        return res.status(400).json({ message: 'Date not bookable' })
 
       // capacity check
       const agg = await Reservation.aggregate([
@@ -60,10 +74,12 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       const used = agg[0]?.total || 0
       const remaining = CAPACITY_PER_SLOT - used
       if (remaining < body.partySize) {
-        return res.status(409).json({ message: 'Not enough capacity for this time. Please pick another slot.' })
+        return res
+          .status(409)
+          .json({ message: 'Not enough capacity for this time. Please pick another slot.' })
       }
 
-      // Create reservation (attach userId from session via header/route if you want)
+      // 🆕 Create reservation with payment info
       const doc = await Reservation.create({
         name: body.name,
         email: body.email,
@@ -72,7 +88,10 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
         slot,
         partySize: body.partySize,
         notes: body.notes,
-        status: 'confirmed'
+        status: 'confirmed',
+        paymentStatus: body.paymentStatus,
+        paymentMethod: body.paymentMethod,
+        amount: body.amount || 0
       })
 
       return res.status(201).json({ id: String(doc._id) })
