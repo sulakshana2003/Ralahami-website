@@ -1,10 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import useSWR from "swr";
 import { useMemo, useState } from "react";
-import DashboardLayout from "../components/DashboardLayout"; // ✅ same layout as Products
-import AdminGuard from "../components/AdminGuard"
+import DashboardLayout from "../components/DashboardLayout";
+import AdminGuard from "../components/AdminGuard";
 
-// ---------- utils ----------
 const fetcher = async (url: string) => {
   const r = await fetch(url, { credentials: "same-origin" });
   if (!r.ok) throw new Error(await r.text());
@@ -17,13 +16,11 @@ const fmt = new Intl.NumberFormat("en-LK", {
 });
 const today = () => {
   const d = new Date();
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
-    2,
-    "0"
-  )}-${String(d.getDate()).padStart(2, "0")}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate()
+  ).padStart(2, "0")}`;
 };
 
-// ---------- UI atoms ----------
 function Button({
   children,
   tone = "primary",
@@ -114,7 +111,6 @@ function StatCard({ title, value }: { title: string; value: string | number }) {
   );
 }
 
-// ---------- types ----------
 type Reservation = {
   _id: string;
   name: string;
@@ -130,12 +126,19 @@ type Reservation = {
   amount: number;
 };
 
-// ---------- main ----------
 export default function ReservationAdminPage() {
-  const { data: reservations, mutate } = useSWR<Reservation[]>(
-    "/api/reservations/reservations",
-    fetcher
-  );
+  // 🔎 filter states
+  const [filterName, setFilterName] = useState("");
+  const [filterParty, setFilterParty] = useState("");
+  const [filterDate, setFilterDate] = useState("");
+
+  const query = `/api/reservations/reservations?name=${encodeURIComponent(
+    filterName
+  )}&partySize=${encodeURIComponent(filterParty)}&date=${encodeURIComponent(
+    filterDate
+  )}`;
+
+  const { data: reservations, mutate } = useSWR<Reservation[]>(query, fetcher);
   const list = Array.isArray(reservations) ? reservations : [];
 
   const stats = useMemo(() => {
@@ -148,7 +151,6 @@ export default function ReservationAdminPage() {
     return { total, confirmed, cancelled, revenue };
   }, [list]);
 
-  // modal state
   const [isOpen, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
 
@@ -201,163 +203,184 @@ export default function ReservationAdminPage() {
 
   return (
     <AdminGuard>
-    <DashboardLayout>
-      {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Reservation Management</h1>
-          <p className="text-sm text-neutral-500">
-            Track table bookings and payments
-          </p>
+      <DashboardLayout>
+        {/* Header */}
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">Reservation Management</h1>
+            <p className="text-sm text-neutral-500">
+              Track table bookings and payments
+            </p>
+          </div>
+          <Button onClick={() => setOpen(true)}>+ New Reservation</Button>
         </div>
-        <Button onClick={() => setOpen(true)}>+ New Reservation</Button>
-      </div>
 
-      {/* Stats */}
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-        <StatCard title="Total Reservations" value={stats.total} />
-        <StatCard title="Confirmed" value={stats.confirmed} />
-        <StatCard title="Cancelled" value={stats.cancelled} />
-        <StatCard title="Revenue" value={fmt.format(stats.revenue)} />
-      </div>
+        {/* 🔎 Filters */}
+        <div className="mb-6 grid gap-4 sm:grid-cols-3">
+          <Input
+            placeholder="Filter by Name"
+            value={filterName}
+            onChange={(e) => setFilterName(e.target.value)}
+          />
+          <Input
+            type="number"
+            placeholder="Filter by Party Size"
+            value={filterParty}
+            onChange={(e) => setFilterParty(e.target.value)}
+          />
+          <Input
+            type="date"
+            value={filterDate}
+            onChange={(e) => setFilterDate(e.target.value)}
+          />
+        </div>
 
-      {/* Table */}
-      <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
-        <table className="w-full text-sm">
-          <thead className="bg-neutral-50 text-neutral-600">
-            <tr>
-              <th className="px-4 py-2 text-left">Date</th>
-              <th className="px-4 py-2">Slot</th>
-              <th className="px-4 py-2">Name</th>
-              <th className="px-4 py-2">Party</th>
-              <th className="px-4 py-2">Status</th>
-              <th className="px-4 py-2">Payment</th>
-              <th className="px-4 py-2">Method</th>
-              <th className="px-4 py-2">Amount</th>
-              <th className="px-4 py-2">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {list.map((r) => (
-              <tr key={r._id} className="border-t">
-                <td className="px-4 py-3">{r.date}</td>
-                <td className="px-4 py-3">{r.slot}</td>
-                <td className="px-4 py-3">{r.name}</td>
-                <td className="px-4 py-3">{r.partySize}</td>
-                <td className="px-4 py-3">
-                  <Select
-                    value={r.status}
-                    onChange={(e) =>
-                      updateReservation(r._id, { status: e.target.value })
-                    }
-                  >
-                    <option value="confirmed">Confirmed</option>
-                    <option value="cancelled">Cancelled</option>
-                  </Select>
-                </td>
-                <td className="px-4 py-3">
-                  <Select
-                    value={r.paymentStatus}
-                    onChange={(e) =>
-                      updateReservation(r._id, {
-                        paymentStatus: e.target.value,
-                      })
-                    }
-                  >
-                    <option value="pending">Pending</option>
-                    <option value="paid">Paid</option>
-                    <option value="unpaid">Unpaid</option>
-                  </Select>
-                </td>
-                <td className="px-4 py-3">{r.paymentMethod || "-"}</td>
-                <td className="px-4 py-3">{fmt.format(r.amount || 0)}</td>
-                <td className="px-4 py-3 text-right">
-                  <Button
-                    tone="danger"
-                    onClick={() => deleteReservation(r._id)}
-                  >
-                    Delete
-                  </Button>
-                </td>
-              </tr>
-            ))}
-            {list.length === 0 && (
+        {/* Stats */}
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+          <StatCard title="Total Reservations" value={stats.total} />
+          <StatCard title="Confirmed" value={stats.confirmed} />
+          <StatCard title="Cancelled" value={stats.cancelled} />
+          <StatCard title="Revenue" value={fmt.format(stats.revenue)} />
+        </div>
+
+        {/* Table */}
+        <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
+          <table className="w-full text-sm">
+            <thead className="bg-neutral-50 text-neutral-600">
               <tr>
-                <td colSpan={9} className="p-6 text-center text-neutral-500">
-                  No reservations yet
-                </td>
+                <th className="px-4 py-2 text-left">Date</th>
+                <th className="px-4 py-2">Slot</th>
+                <th className="px-4 py-2">Name</th>
+                <th className="px-4 py-2">Party</th>
+                <th className="px-4 py-2">Status</th>
+                <th className="px-4 py-2">Payment</th>
+                <th className="px-4 py-2">Method</th>
+                <th className="px-4 py-2">Amount</th>
+                <th className="px-4 py-2">Actions</th>
               </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {list.map((r) => (
+                <tr key={r._id} className="border-t">
+                  <td className="px-4 py-3">{r.date}</td>
+                  <td className="px-4 py-3">{r.slot}</td>
+                  <td className="px-4 py-3">{r.name}</td>
+                  <td className="px-4 py-3">{r.partySize}</td>
+                  <td className="px-4 py-3">
+                    <Select
+                      value={r.status}
+                      onChange={(e) =>
+                        updateReservation(r._id, { status: e.target.value })
+                      }
+                    >
+                      <option value="confirmed">Confirmed</option>
+                      <option value="cancelled">Cancelled</option>
+                    </Select>
+                  </td>
+                  <td className="px-4 py-3">
+                    <Select
+                      value={r.paymentStatus}
+                      onChange={(e) =>
+                        updateReservation(r._id, {
+                          paymentStatus: e.target.value,
+                        })
+                      }
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="paid">Paid</option>
+                      <option value="unpaid">Unpaid</option>
+                    </Select>
+                  </td>
+                  <td className="px-4 py-3">{r.paymentMethod || "-"}</td>
+                  <td className="px-4 py-3">
+                    <Input
+                      type="number"
+                      value={r.amount}
+                      onChange={(e) =>
+                        updateReservation(r._id, {
+                          amount: Number(e.target.value || 0),
+                        })
+                      }
+                      className="w-24 text-right"
+                    />
+                  </td>
+                  <td className="px-4 py-3 text-right">
+                    <Button tone="danger" onClick={() => deleteReservation(r._id)}>
+                      Delete
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+              {list.length === 0 && (
+                <tr>
+                  <td colSpan={9} className="p-6 text-center text-neutral-500">
+                    No reservations yet
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
 
-      {/* Create Modal */}
-      <Modal
-        open={isOpen}
-        onClose={() => setOpen(false)}
-        title="Create Reservation"
-        footer={
-          <>
-            <Button tone="ghost" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button
-              onClick={() =>
-                (
-                  document.getElementById("resForm") as HTMLFormElement
-                )?.requestSubmit()
-              }
-              disabled={busy}
-            >
-              Save
-            </Button>
-          </>
-        }
-      >
-        <form
-          id="resForm"
-          onSubmit={addReservation}
-          className="grid gap-3 sm:grid-cols-2"
+        {/* Create Modal */}
+        <Modal
+          open={isOpen}
+          onClose={() => setOpen(false)}
+          title="Create Reservation"
+          footer={
+            <>
+              <Button tone="ghost" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() =>
+                  (document.getElementById("resForm") as HTMLFormElement)?.requestSubmit()
+                }
+                disabled={busy}
+              >
+                Save
+              </Button>
+            </>
+          }
         >
-          <Input name="name" placeholder="Name" required />
-          <Input name="email" placeholder="Email" required />
-          <Input name="phone" placeholder="Phone" />
-          <Input type="date" name="date" defaultValue={today()} required />
-          <Input type="time" name="slot" required />
-          <Input
-            type="number"
-            name="partySize"
-            placeholder="Party Size"
-            min={1}
-            max={100}
-            required
-          />
-          <Input
-            type="number"
-            name="amount"
-            placeholder="Amount (LKR)"
-            min={0}
-          />
-          <Select name="paymentMethod">
-            <option value="">Method</option>
-            <option value="cash">Cash</option>
-            <option value="card">Card</option>
-            <option value="online">Online</option>
-          </Select>
-          <Select name="paymentStatus" defaultValue="pending">
-            <option value="pending">Pending</option>
-            <option value="paid">Paid</option>
-            <option value="unpaid">Unpaid</option>
-          </Select>
-          <Input
-            name="notes"
-            placeholder="Notes (optional)"
-            className="sm:col-span-2"
-          />
-        </form>
-      </Modal>
-    </DashboardLayout>
+          <form
+            id="resForm"
+            onSubmit={addReservation}
+            className="grid gap-3 sm:grid-cols-2"
+          >
+            <Input name="name" placeholder="Name" required />
+            <Input name="email" placeholder="Email" required />
+            <Input name="phone" placeholder="Phone" />
+            <Input type="date" name="date" defaultValue={today()} required />
+            <Input type="time" name="slot" required />
+            <Input
+              type="number"
+              name="partySize"
+              placeholder="Party Size"
+              min={1}
+              max={100}
+              required
+            />
+            <Input type="number" name="amount" placeholder="Amount (LKR)" min={0} />
+            <Select name="paymentMethod">
+              <option value="">Method</option>
+              <option value="cash">Cash</option>
+              <option value="card">Card</option>
+              <option value="online">Online</option>
+            </Select>
+            <Select name="paymentStatus" defaultValue="pending">
+              <option value="pending">Pending</option>
+              <option value="paid">Paid</option>
+              <option value="unpaid">Unpaid</option>
+            </Select>
+            <Input
+              name="notes"
+              placeholder="Notes (optional)"
+              className="sm:col-span-2"
+            />
+          </form>
+        </Modal>
+      </DashboardLayout>
     </AdminGuard>
   );
 }
