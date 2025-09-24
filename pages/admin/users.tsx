@@ -1,13 +1,12 @@
-// pages/admin/users.tsx
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
-import { useSession, signIn, } from "next-auth/react";
+import { useSession, signIn } from "next-auth/react";
 import DashboardLayout from "../components/DashboardLayout";
 
-// ---------- utils ----------
+// ---------- fetch helper ----------
 const fetcher = (url: string) =>
   fetch(url, { credentials: "same-origin" }).then(async (r) => {
     if (!r.ok) throw new Error(await r.text());
@@ -21,6 +20,9 @@ type UserItem = {
   name: string;
   email: string;
   role: Role;
+  phone?: string;
+  address?: string;
+  loyaltyPoints: number;
   isActive: boolean;
   createdAt: string;
 };
@@ -33,7 +35,7 @@ function Button({
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
   tone?: "primary" | "ghost" | "danger";
 }) {
-  const styles = {
+  const map = {
     primary: "bg-indigo-600 text-white hover:bg-indigo-700",
     ghost:
       "border border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50",
@@ -42,9 +44,7 @@ function Button({
   return (
     <button
       {...props}
-      className={`px-4 py-2 rounded-lg text-sm font-medium shadow-sm active:scale-[.98] transition ${
-        styles[tone]
-      } ${props.className || ""}`}
+      className={`px-4 py-2 rounded-lg text-sm font-medium shadow-sm active:scale-95 transition ${map[tone]} ${props.className || ""}`}
     >
       {children}
     </button>
@@ -54,9 +54,7 @@ function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
       {...props}
-      className={`h-11 w-full rounded-xl border border-neutral-300 bg-white px-3 text-sm focus:ring-2 focus:ring-indigo-200 ${
-        props.className || ""
-      }`}
+      className={`h-11 w-full rounded-xl border border-neutral-300 bg-white px-3 text-sm focus:ring-2 focus:ring-indigo-200 ${props.className || ""}`}
     />
   );
 }
@@ -64,45 +62,23 @@ function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select
       {...props}
-      className={`h-11 w-full rounded-xl border border-neutral-300 bg-white px-3 text-sm focus:ring-2 focus:ring-indigo-200 ${
-        props.className || ""
-      }`}
+      className={`h-11 w-full rounded-xl border border-neutral-300 bg-white px-3 text-sm focus:ring-2 focus:ring-indigo-200 ${props.className || ""}`}
     />
   );
 }
-function Badge({
-  children,
-  tone = "muted",
-}: {
-  children: React.ReactNode;
-  tone?: "success" | "danger" | "muted";
-}) {
-  const map: Record<string, string> = {
+function Badge({ tone = "muted", children }: any) {
+  const colors: Record<string, string> = {
     success: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
     danger: "bg-rose-50 text-rose-700 ring-1 ring-rose-200",
     muted: "bg-neutral-100 text-neutral-700 ring-1 ring-neutral-200",
   };
   return (
-    <span
-      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${map[tone]}`}
-    >
+    <span className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${colors[tone]}`}>
       {children}
     </span>
   );
 }
-function Modal({
-  open,
-  onClose,
-  title,
-  children,
-  footer,
-}: {
-  open: boolean;
-  onClose: () => void;
-  title: string;
-  children: React.ReactNode;
-  footer?: React.ReactNode;
-}) {
+function Modal({ open, onClose, title, children, footer }: any) {
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50">
@@ -111,17 +87,10 @@ function Modal({
         <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-xl">
           <div className="mb-4 flex items-center justify-between border-b pb-2">
             <h3 className="text-lg font-semibold">{title}</h3>
-            <button
-              onClick={onClose}
-              className="text-neutral-500 hover:text-black"
-            >
-              ✕
-            </button>
+            <button onClick={onClose} className="text-neutral-500 hover:text-black">✕</button>
           </div>
           <div className="space-y-4">{children}</div>
-          {footer && (
-            <div className="mt-6 flex justify-end gap-2">{footer}</div>
-          )}
+          {footer && <div className="mt-6 flex justify-end gap-2">{footer}</div>}
         </div>
       </div>
     </div>
@@ -136,6 +105,30 @@ function StatCard({ title, value }: { title: string; value: string | number }) {
   );
 }
 
+// ---------- helpers for report ----------
+function fmtDate(d: string | number | Date) {
+  try {
+    return new Date(d).toLocaleString();
+  } catch {
+    return String(d ?? "");
+  }
+}
+async function toDataUrl(url: string) {
+  try {
+    const res = await fetch(url, { credentials: "same-origin" });
+    if (!res.ok) throw new Error(String(res.status));
+    const blob = await res.blob();
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(String(reader.result));
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return ""; // no logo fallback
+  }
+}
+
 // ---------- main ----------
 export default function UsersPage() {
   const { status } = useSession();
@@ -144,37 +137,71 @@ export default function UsersPage() {
   }, [status]);
 
   const [q, setQ] = useState("");
+  const [roleFilter, setRoleFilter] = useState<"" | Role>("");
+  const [statusFilter, setStatusFilter] = useState<"" | "active" | "blocked">(""); // status filter
   const [page, setPage] = useState(1);
   const limit = 10;
 
   const [isOpen, setOpen] = useState(false);
   const [editing, setEditing] = useState<UserItem | null>(null);
+  const [viewUser, setViewUser] = useState<UserItem | null>(null);
   const [busy, setBusy] = useState(false);
   const [f, setF] = useState<any>({
     name: "",
     email: "",
     password: "",
     role: "user",
+    phone: "",
+    address: "",
+    loyaltyPoints: 0,
     isActive: true,
   });
 
-  const url = useMemo(
-    () => `/api/users?q=${encodeURIComponent(q)}&page=${page}&limit=${limit}`,
-    [q, page]
-  );
-  const { data, mutate, isLoading, error } = useSWR(url, fetcher);
+  const url = useMemo(() => {
+    const params = new URLSearchParams({
+      q,
+      page: String(page),
+      limit: String(limit),
+    });
+    if (roleFilter) params.append("role", roleFilter);
+    if (statusFilter) params.append("status", statusFilter);
+    return `/api/users?${params.toString()}`;
+  }, [q, page, roleFilter, statusFilter]);
 
+  const { data, mutate, isLoading, error } = useSWR(url, fetcher);
   const items: UserItem[] = data?.items ?? [];
   const pages: number = data?.pages ?? 1;
 
-  // actions
+  // Client-side status filtering too (works even if backend ignores ?status)
+  const visibleItems = useMemo(() => {
+    return items.filter((u) =>
+      statusFilter === ""
+        ? true
+        : statusFilter === "active"
+        ? u.isActive
+        : !u.isActive
+    );
+  }, [items, statusFilter]);
+
   async function save() {
-    const payload = { ...f };
-    const url = editing ? `/api/users/${editing._id}` : `/api/users`;
-    const method = editing ? "PUT" : "POST";
+    if (!f.name || !f.email || (!editing && !f.password)) {
+      alert("Name, Email and Password (for new user) are required");
+      return;
+    }
+
+    let payload: any = { ...f };
+    if (editing) {
+      if (f.password) payload.newPassword = f.password;
+      delete payload.password;
+    }
+
+    const method = editing ? "PATCH" : "POST";
+    const endpoint = editing ? `/api/users/${editing._id}` : "/api/users";
+
     setBusy(true);
-    const res = await fetch(url, {
+    const res = await fetch(endpoint, {
       method,
+      credentials: "same-origin",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
@@ -185,11 +212,146 @@ export default function UsersPage() {
     await mutate();
   }
 
+  async function toggleActive(u: UserItem) {
+    const res = await fetch(`/api/users/${u._id}`, {
+      method: "PATCH",
+      credentials: "same-origin",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ isActive: !u.isActive }),
+    });
+    if (!res.ok) {
+      alert(await res.text());
+      return;
+    }
+    await mutate();
+  }
+
   async function remove(id: string) {
     if (!confirm("Delete user?")) return;
-    const res = await fetch(`/api/users/${id}`, { method: "DELETE" });
-    if (!res.ok) return alert(await res.text());
+    const r = await fetch(`/api/users/${id}`, {
+      method: "DELETE",
+      credentials: "same-origin",
+    });
+    if (!r.ok) return alert(await r.text());
     await mutate();
+  }
+
+  // ---------- Generate Report (downloads a branded HTML file) ----------
+  async function generateReport() {
+    // fetch ALL users matching current search/filters (ignores pagination)
+    const params = new URLSearchParams({ q, page: "1", limit: "100000" });
+    if (roleFilter) params.append("role", roleFilter);
+    if (statusFilter) params.append("status", statusFilter);
+    const allRes = await fetch(`/api/users?${params.toString()}`, {
+      credentials: "same-origin",
+    });
+    if (!allRes.ok) {
+      alert(await allRes.text());
+      return;
+    }
+    const allData = await allRes.json();
+    const allItems: UserItem[] = (allData?.items ?? []) as UserItem[];
+
+    // logo
+    const logoDataUrl = await toDataUrl("/images/RalahamiLogo.png");
+
+    // compute totals
+    const totalUsers = allItems.length;
+    const totalAdmins = allItems.filter((u) => u.role === "admin").length;
+    const totalActive = allItems.filter((u) => u.isActive).length;
+    const totalBlocked = totalUsers - totalActive;
+
+    // build HTML report
+    const now = new Date();
+    const title = "User Report";
+    const subtitle = now.toLocaleString();
+
+    const rowsHtml = allItems
+      .map((u) => {
+        return `<tr>
+          <td>${u.name || ""}</td>
+          <td>${u.email || ""}</td>
+          <td>${u.role}</td>
+          <td>${u.isActive ? "Active" : "Blocked"}</td>
+          <td>${u.phone || "-"}</td>
+          <td>${u.address || "-"}</td>
+          <td>${fmtDate(u.createdAt)}</td>
+        </tr>`;
+      })
+      .join("");
+
+    const html = `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>${title}</title>
+<style>
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: #111827; margin: 24px; }
+  .header { display:flex; align-items:center; gap:16px; }
+  .logo { height:48px; width:auto; }
+  .title { font-size: 22px; font-weight: 700; margin: 0; }
+  .subtitle { color:#6B7280; margin-top:4px; }
+  .cards { display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:12px; margin:20px 0; }
+  .card { border:1px solid #E5E7EB; border-radius:12px; padding:12px; }
+  .card .label { font-size:12px; color:#6B7280; }
+  .card .value { font-size:22px; font-weight:700; margin-top:4px; }
+  table { width:100%; border-collapse: collapse; margin-top: 10px; }
+  th, td { border:1px solid #E5E7EB; padding:8px 10px; font-size: 12px; }
+  thead th { background:#F9FAFB; text-align:left; color:#374151; }
+  tfoot td { background:#F9FAFB; font-weight:600; }
+</style>
+</head>
+<body>
+  <div class="header">
+    ${logoDataUrl ? `<img class="logo" src="${logoDataUrl}" alt="Logo"/>` : ""}
+    <div>
+      <h1 class="title">${title}</h1>
+      <div class="subtitle">${subtitle}</div>
+    </div>
+  </div>
+
+  <div class="cards">
+    <div class="card"><div class="label">Total Users</div><div class="value">${totalUsers}</div></div>
+    <div class="card"><div class="label">Admins</div><div class="value">${totalAdmins}</div></div>
+    <div class="card"><div class="label">Active</div><div class="value">${totalActive}</div></div>
+    <div class="card"><div class="label">Blocked</div><div class="value">${totalBlocked}</div></div>
+  </div>
+
+  <table>
+    <thead>
+      <tr>
+        <th style="width:180px">Name</th>
+        <th style="width:220px">Email</th>
+        <th style="width:90px">Role</th>
+        <th style="width:90px">Status</th>
+        <th style="width:140px">Phone</th>
+        <th>Address</th>
+        <th style="width:170px">Created</th>
+      </tr>
+    </thead>
+    <tbody>${rowsHtml}</tbody>
+    <tfoot>
+      <tr>
+        <td colspan="7">Generated on ${subtitle}</td>
+      </tr>
+    </tfoot>
+  </table>
+</body>
+</html>`;
+
+    // download as HTML file
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const urlObj = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
+      now.getDate()
+    ).padStart(2, "0")}_${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}`;
+    a.href = urlObj;
+    a.download = `user-report_${stamp}.html`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(urlObj);
   }
 
   return (
@@ -198,43 +360,80 @@ export default function UsersPage() {
       <div className="mb-6 flex items-center justify-between">
         <div>
           <h1 className="text-2xl font-bold">User Management</h1>
-          <p className="text-sm text-neutral-500">
-            Manage accounts, roles & activity
-          </p>
+          <p className="text-sm text-neutral-500">Manage accounts, roles & activity</p>
+        </div>
+
+        <div className="flex gap-2">
+          <Button
+            onClick={() => {
+              setF({
+                name: "",
+                email: "",
+                password: "",
+                role: "user",
+                phone: "",
+                address: "",
+                loyaltyPoints: 0,
+                isActive: true,
+              });
+              setEditing(null);
+              setOpen(true);
+            }}
+          >
+            + Add User
+          </Button>
+          <Button tone="ghost" onClick={generateReport}>Generate Report</Button>
         </div>
       </div>
 
-      {/* Stats */}
+      {/* Stats (based on currently visible items) */}
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-        <StatCard title="Total Users" value={items.length} />
-        <StatCard
-          title="Admins"
-          value={items.filter((u) => u.role === "admin").length}
-        />
-        <StatCard
-          title="Active"
-          value={items.filter((u) => u.isActive).length}
-        />
-        <StatCard
-          title="Blocked"
-          value={items.filter((u) => !u.isActive).length}
-        />
+        <StatCard title="Total Users" value={visibleItems.length} />
+        <StatCard title="Admins" value={visibleItems.filter((u) => u.role === "admin").length} />
+        <StatCard title="Active" value={visibleItems.filter((u) => u.isActive).length} />
+        <StatCard title="Blocked" value={visibleItems.filter((u) => !u.isActive).length} />
       </div>
 
-      {/* Search */}
-      <div className="mb-4 flex gap-3">
-        <Input
-          placeholder="Search by name or email..."
-          value={q}
-          onChange={(e) => {
-            setQ(e.target.value);
-            setPage(1);
-          }}
-        />
-        <Button tone="ghost" onClick={() => mutate()}>
-          Refresh
-        </Button>
-      </div>
+      {/* Filters */}
+<div className="mb-4 flex flex-wrap gap-3">
+  <Input
+    placeholder="Search by name or email..."
+    value={q}
+    onChange={(e) => {
+      setQ(e.target.value);
+      setPage(1);
+    }}
+  />
+
+  {/* Role filter — compact */}
+  <div className="w-28">
+    <Select
+      value={roleFilter}
+      onChange={(e) => { setRoleFilter(e.target.value as Role | ""); setPage(1); }}
+      className="h-9 px-2 w-full"
+    >
+      <option value="">All Roles</option>
+      <option value="user">User</option>
+      <option value="admin">Admin</option>
+    </Select>
+  </div>
+
+  {/* Status filter — compact */}
+  <div className="w-28">
+    <Select
+      value={statusFilter}
+      onChange={(e) => { setStatusFilter(e.target.value as "" | "active" | "blocked"); setPage(1); }}
+      className="h-9 px-2 w-full"
+    >
+      <option value="">All Status</option>
+      <option value="active">Active</option>
+      <option value="blocked">Blocked</option>
+    </Select>
+  </div>
+
+  <Button tone="ghost" onClick={() => mutate()}>Refresh</Button>
+</div>
+
 
       {/* Table */}
       <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
@@ -250,27 +449,28 @@ export default function UsersPage() {
           </thead>
           <tbody>
             {isLoading ? (
-              <tr>
-                <td colSpan={5} className="p-6 text-center text-neutral-500">
-                  Loading…
-                </td>
-              </tr>
+              <tr><td colSpan={5} className="p-6 text-center text-neutral-500">Loading…</td></tr>
             ) : error ? (
-              <tr>
-                <td colSpan={5} className="p-6 text-center text-rose-600">
-                  {(error as any).message}
-                </td>
-              </tr>
-            ) : items.length === 0 ? (
-              <tr>
-                <td colSpan={5} className="p-6 text-center text-neutral-500">
-                  No users found
-                </td>
-              </tr>
+              <tr><td colSpan={5} className="p-6 text-center text-rose-600">{(error as any).message}</td></tr>
+            ) : visibleItems.length === 0 ? (
+              <tr><td colSpan={5} className="p-6 text-center text-neutral-500">No users found</td></tr>
             ) : (
-              items.map((u) => (
-                <tr key={u._id} className="border-t">
-                  <td className="px-4 py-3">{u.name}</td>
+              visibleItems.map((u) => (
+                <tr
+                  key={u._id}
+                  className="border-t hover:bg-neutral-50"
+                >
+                  {/* Only the name opens the details modal */}
+                  <td className="px-4 py-3">
+                    <button
+                      type="button"
+                      onClick={() => setViewUser(u)}
+                      className="text-indigo-600 hover:underline"
+                      title="View details"
+                    >
+                      {u.name}
+                    </button>
+                  </td>
                   <td>{u.email}</td>
                   <td>
                     <Select
@@ -278,10 +478,11 @@ export default function UsersPage() {
                       onChange={async (e) => {
                         await fetch(`/api/users/${u._id}`, {
                           method: "PATCH",
+                          credentials: "same-origin",
                           headers: { "Content-Type": "application/json" },
                           body: JSON.stringify({ role: e.target.value }),
                         });
-                        mutate();
+                        await mutate();
                       }}
                     >
                       <option value="user">user</option>
@@ -289,14 +490,19 @@ export default function UsersPage() {
                     </Select>
                   </td>
                   <td>
-                    {u.isActive ? (
-                      <Badge tone="success">Active</Badge>
-                    ) : (
-                      <Badge tone="danger">Blocked</Badge>
-                    )}
+                    {u.isActive ? <Badge tone="success">Active</Badge> : <Badge tone="danger">Blocked</Badge>}
                   </td>
                   <td className="flex gap-2">
-                    <Button tone="danger" onClick={() => remove(u._id)}>
+                    <Button tone="ghost" onClick={(e) => { e.stopPropagation(); toggleActive(u); }}>
+                      {u.isActive ? "Block" : "Activate"}
+                    </Button>
+                    <Button tone="ghost" onClick={(e) => {
+                      e.stopPropagation();
+                      setEditing(u);
+                      setF({ ...u, password: "" });
+                      setOpen(true);
+                    }}>Edit</Button>
+                    <Button tone="danger" onClick={(e) => { e.stopPropagation(); remove(u._id); }}>
                       Delete
                     </Button>
                   </td>
@@ -309,83 +515,52 @@ export default function UsersPage() {
 
       {/* Pagination */}
       <div className="mt-4 flex justify-between text-sm">
-        <span>
-          Page {page} of {pages}
-        </span>
+        <span>Page {page} of {pages}</span>
         <div className="flex gap-2">
-          <Button
-            tone="ghost"
-            disabled={page <= 1}
-            onClick={() => setPage((p) => Math.max(1, p - 1))}
-          >
-            Prev
-          </Button>
-          <Button
-            tone="ghost"
-            disabled={page >= pages}
-            onClick={() => setPage((p) => Math.min(pages, p + 1))}
-          >
-            Next
-          </Button>
+          <Button tone="ghost" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</Button>
+          <Button tone="ghost" disabled={page >= pages} onClick={() => setPage((p) => Math.min(pages, p + 1))}>Next</Button>
         </div>
       </div>
 
-      {/* Modal */}
+      {/* Create / Edit Modal */}
       <Modal
         open={isOpen}
-        onClose={() => {
-          setOpen(false);
-          setEditing(null);
-        }}
-        title={editing ? `Edit User` : "Create User"}
+        onClose={() => { setOpen(false); setEditing(null); }}
+        title={editing ? "Edit User" : "Create User"}
         footer={
           <>
-            <Button tone="ghost" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={save} disabled={busy}>
-              {editing ? "Save" : "Create"}
-            </Button>
+            <Button tone="ghost" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button onClick={save} disabled={busy}>{editing ? "Save" : "Create"}</Button>
           </>
         }
       >
         <div className="grid gap-3 sm:grid-cols-2">
-          <Input
-            placeholder="Full name"
-            value={f.name}
-            onChange={(e) => setF({ ...f, name: e.target.value })}
-          />
-          <Input
-            placeholder="Email"
-            type="email"
-            value={f.email}
-            onChange={(e) => setF({ ...f, email: e.target.value })}
-          />
-          {!editing && (
-            <Input
-              placeholder="Password"
-              type="password"
-              value={f.password}
-              onChange={(e) => setF({ ...f, password: e.target.value })}
-            />
-          )}
-          <Select
-            value={f.role}
-            onChange={(e) => setF({ ...f, role: e.target.value as Role })}
-          >
+          <Input placeholder="Full name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
+          <Input placeholder="Email" type="email" value={f.email} onChange={(e) => setF({ ...f, email: e.target.value })} />
+          {!editing && <Input placeholder="Password" type="password" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} />}
+          {editing && <Input placeholder="New Password (optional)" type="password" value={f.password} onChange={(e) => setF({ ...f, password: e.target.value })} />}
+          <Input placeholder="Phone (+94 7XXXXXXXX)" value={f.phone} onChange={(e) => setF({ ...f, phone: e.target.value })} />
+          <Input placeholder="Address" value={f.address} onChange={(e) => setF({ ...f, address: e.target.value })} />
+          <Select value={f.role} onChange={(e) => setF({ ...f, role: e.target.value as Role })}>
             <option value="user">user</option>
             <option value="admin">admin</option>
           </Select>
-          <Select
-            value={String(f.isActive)}
-            onChange={(e) =>
-              setF({ ...f, isActive: e.target.value === "true" })
-            }
-          >
-            <option value="true">Active</option>
-            <option value="false">Blocked</option>
-          </Select>
         </div>
+      </Modal>
+
+      {/* View Details Modal */}
+      <Modal open={!!viewUser} onClose={() => setViewUser(null)} title="User Details">
+        {viewUser && (
+          <div className="space-y-2">
+            <p><strong>Name:</strong> {viewUser.name}</p>
+            <p><strong>Email:</strong> {viewUser.email}</p>
+            <p><strong>Role:</strong> {viewUser.role}</p>
+            <p><strong>Phone:</strong> {viewUser.phone || "-"}</p>
+            <p><strong>Address:</strong> {viewUser.address || "-"}</p>
+            <p><strong>Status:</strong> {viewUser.isActive ? "Active" : "Blocked"}</p>
+            <p><strong>Joined:</strong> {new Date(viewUser.createdAt).toLocaleString()}</p>
+          </div>
+        )}
       </Modal>
     </DashboardLayout>
   );

@@ -65,6 +65,39 @@ export const authOptions: NextAuthOptions = {
       }
       return session
     },
+
+
+     async signIn({ user }) {
+      try {
+        await dbConnect()
+        const email = user?.email
+        if (!email) return true
+
+        // NEW: type the lean() result so TS knows there is an isActive field
+        type ActiveDoc = { _id: Types.ObjectId; isActive?: boolean | string | number }
+        const doc = await User.findOne({ email }).select('isActive').lean<ActiveDoc>()  // ← NEW
+
+        // (optional) normalize legacy values: "false"/"true", 0/1, boolean, or missing
+        const raw = doc?.isActive
+        const isBlocked =
+          raw === false ||
+          raw === 0 ||
+          (typeof raw === 'string' && raw.toLowerCase() === 'false')
+
+        if (isBlocked) {
+          // returning false -> NextAuth returns { ok:false, error:'AccessDenied' }
+          return false
+        }
+        return true
+      } catch {
+        // if DB check fails, don't lock users out
+        return true
+      }
+    },
+
+    
+
+    
   },
   secret: process.env.NEXTAUTH_SECRET,
 }

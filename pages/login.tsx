@@ -37,6 +37,16 @@ export default function LoginPage() {
     if (!res || !res.ok) {
       setLoading(false);
       setError("Invalid email or password.");
+            setLoading(false);
+      // NEW: Map NextAuth error codes to friendly messages (includes banned case)
+      if (res?.error === "AccessDenied") {
+        setError("Your account has been blocked by an admin. You can’t sign in.");
+      } else if (res?.error === "CredentialsSignin") {
+        setError("Invalid email or password.");
+      } else {
+        setError("Unable to sign in. Please try again.");
+      }
+      // END NEW
       return;
     }
 
