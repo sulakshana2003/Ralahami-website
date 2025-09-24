@@ -1,42 +1,30 @@
-// pages/cart.tsx
 import Image from "next/image";
 import Link from "next/link";
 import { useMemo, useState } from "react";
-import { useCart } from "@/src/context/CartContext"; // ← swap if yours is "@/hooks/useCart"
-import Navbar from './components/Navbar'
-import Footer from './components/Footer'
+import { useCart } from "@/hooks/useCart";
 
-const FREE_DELIVERY_THRESHOLD = 5000; // LKR – tweak as you like
+const FREE_DELIVERY_THRESHOLD = 5000; // LKR
 
 export default function CartPage() {
-  const { items, isReady, setQty, removeFromCart, subtotal, clearCart } = useCart();
+  const items = useCart((s) => s.items);
+  const setQty = useCart((s) => s.setQty);
+  const removeFromCart = useCart((s) => s.remove);
+  const clearCart = useCart((s) => s.clear);
+  const subtotal = useCart((s) => s.subtotal());
+
   const [promo, setPromo] = useState("");
   const [appliedPromo, setAppliedPromo] = useState<string | null>(null);
 
-  // fake promo logic: "WELCOME10" gives 10% off (demo only)
   const discount = useMemo(() => {
     if (appliedPromo?.toUpperCase() === "WELCOME10") return subtotal * 0.1;
     return 0;
   }, [appliedPromo, subtotal]);
 
   const total = Math.max(0, subtotal - discount);
-
   const progress = Math.min(100, Math.round((subtotal / FREE_DELIVERY_THRESHOLD) * 100));
   const remainingForFree = Math.max(0, FREE_DELIVERY_THRESHOLD - subtotal);
 
-  if (!isReady) {
-    return (
-      <div className="pt-28 pb-16">
-        <div className="mx-auto max-w-6xl space-y-4">
-          {[...Array(3)].map((_, i) => (
-            <div key={i} className="h-24 animate-pulse rounded-2xl bg-neutral-100" />
-          ))}
-        </div>
-      </div>
-    );
-  }
-
-  if (items.length === 0) {
+  if (!items || items.length === 0) {
     return (
       <div className="pt-28 pb-16">
         <div className="mx-auto max-w-3xl rounded-2xl border border-neutral-200 bg-white p-10 text-center shadow-sm">
@@ -57,12 +45,8 @@ export default function CartPage() {
   }
 
   return (
-    <>
-     <Navbar/>
     <div className="pt-28 pb-20">
-     
       <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[1.8fr_1fr]">
-        {/* Cart items */}
         <section className="space-y-4">
           <header className="flex items-end justify-between">
             <div>
@@ -73,7 +57,7 @@ export default function CartPage() {
               </p>
             </div>
             <button
-              onClick={clearCart}
+              onClick={() => clearCart()}
               className="text-sm text-neutral-600 underline-offset-4 hover:text-black hover:underline"
             >
               Clear cart
@@ -83,11 +67,7 @@ export default function CartPage() {
           <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm">
             <ul className="divide-y">
               {items.map((it) => (
-                <li
-                  key={it.id}
-                  className="group grid gap-4 p-4 sm:grid-cols-[96px_1fr_auto] sm:items-center"
-                >
-                  {/* Image */}
+                <li key={it.slug} className="group grid gap-4 p-4 sm:grid-cols-[96px_1fr_auto] sm:items-center">
                   <div className="relative h-24 w-full overflow-hidden rounded-xl sm:h-24 sm:w-24">
                     {it.image ? (
                       <Image src={it.image} alt={it.name} fill className="object-cover" />
@@ -98,17 +78,14 @@ export default function CartPage() {
                     )}
                   </div>
 
-                  {/* Info + qty */}
                   <div className="min-w-0">
                     <div className="flex items-start justify-between gap-4">
                       <div className="min-w-0">
                         <p className="truncate text-sm font-medium">{it.name}</p>
-                        <p className="mt-0.5 text-xs text-neutral-500">
-                          Unit: Rs. {it.unitPrice.toLocaleString()}
-                        </p>
+                        <p className="mt-0.5 text-xs text-neutral-500">Unit: Rs. {it.unitPrice.toLocaleString()}</p>
                       </div>
                       <button
-                        onClick={() => removeFromCart(it.id)}
+                        onClick={() => removeFromCart(it.slug)}
                         className="rounded-full px-2 py-1 text-xs text-neutral-500 hover:bg-neutral-100 hover:text-red-600"
                         aria-label="Remove"
                         title="Remove"
@@ -121,7 +98,7 @@ export default function CartPage() {
                       <label className="text-xs text-neutral-600">Qty</label>
                       <div className="inline-flex items-center rounded-full border border-neutral-300">
                         <button
-                          onClick={() => setQty(it.id, Math.max(1, it.qty - 1))}
+                          onClick={() => setQty(it.slug, Math.max(1, it.qty - 1))}
                           className="h-8 w-8 leading-none hover:bg-neutral-50"
                           aria-label="Decrease"
                         >
@@ -131,13 +108,11 @@ export default function CartPage() {
                           type="number"
                           min={1}
                           value={it.qty}
-                          onChange={(e) =>
-                            setQty(it.id, Math.max(1, parseInt(e.target.value || "1", 10)))
-                          }
+                          onChange={(e) => setQty(it.slug, Math.max(1, parseInt(e.target.value || "1", 10)))}
                           className="h-8 w-14 border-x border-neutral-300 text-center text-sm outline-none"
                         />
                         <button
-                          onClick={() => setQty(it.id, it.qty + 1)}
+                          onClick={() => setQty(it.slug, it.qty + 1)}
                           className="h-8 w-8 leading-none hover:bg-neutral-50"
                           aria-label="Increase"
                         >
@@ -147,25 +122,17 @@ export default function CartPage() {
                     </div>
                   </div>
 
-                  {/* Line total */}
                   <div className="self-start text-right sm:self-center">
-                    <p className="font-semibold">
-                      Rs. {(it.unitPrice * it.qty).toLocaleString()}
-                    </p>
+                    <p className="font-semibold">Rs. {(it.unitPrice * it.qty).toLocaleString()}</p>
                     <p className="mt-1 text-xs text-neutral-500">incl. item total</p>
                   </div>
                 </li>
               ))}
             </ul>
           </div>
-
-          {/* You could drop a “You may also like” grid here */}
-          {/* <Recommendations products={...} /> */}
         </section>
 
-        {/* Summary */}
         <aside className="lg:sticky lg:top-24">
-          {/* Free delivery progress */}
           <div className="mb-4 overflow-hidden rounded-2xl border border-neutral-200 bg-white p-4 shadow-sm">
             {subtotal >= FREE_DELIVERY_THRESHOLD ? (
               <p className="text-sm font-medium text-green-700">🎉 You’ve unlocked free delivery!</p>
@@ -176,10 +143,7 @@ export default function CartPage() {
                   <span className="font-medium">free delivery</span>.
                 </p>
                 <div className="mt-3 h-2 w-full overflow-hidden rounded-full bg-neutral-100">
-                  <div
-                    className="h-full rounded-full bg-black transition-[width] duration-300 ease-out"
-                    style={{ width: `${progress}%` }}
-                  />
+                  <div className="h-full rounded-full bg-black transition-[width] duration-300 ease-out" style={{ width: `${progress}%` }} />
                 </div>
               </>
             )}
@@ -188,7 +152,6 @@ export default function CartPage() {
           <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
             <h2 className="text-lg font-semibold">Order Summary</h2>
 
-            {/* Promo code */}
             <div className="mt-4 rounded-xl bg-neutral-50 p-3">
               <div className="flex items-center gap-2">
                 <input
@@ -205,7 +168,9 @@ export default function CartPage() {
                 </button>
               </div>
               {appliedPromo && (
-                <p className="mt-2 text-xs text-green-700">Code <b>{appliedPromo.toUpperCase()}</b> applied.</p>
+                <p className="mt-2 text-xs text-green-700">
+                  Code <b>{appliedPromo.toUpperCase()}</b> applied.
+                </p>
               )}
             </div>
 
@@ -214,19 +179,16 @@ export default function CartPage() {
                 <span>Subtotal</span>
                 <span>Rs. {subtotal.toLocaleString()}</span>
               </div>
-
               {discount > 0 && (
                 <div className="flex items-center justify-between text-green-700">
                   <span>Promo savings</span>
                   <span>- Rs. {Math.round(discount).toLocaleString()}</span>
                 </div>
               )}
-
               <div className="flex items-center justify-between text-neutral-500">
                 <span>Delivery</span>
                 <span>{subtotal >= FREE_DELIVERY_THRESHOLD ? "Free" : "Calculated at checkout"}</span>
               </div>
-
               <div className="mt-3 border-t border-dashed border-neutral-200 pt-3 text-base">
                 <div className="flex items-center justify-between">
                   <span className="font-semibold">Total</span>
@@ -235,41 +197,27 @@ export default function CartPage() {
                 <p className="mt-1 text-xs text-neutral-500">Taxes included where applicable.</p>
               </div>
             </div>
-
-            <button
-              className="mt-4 w-full rounded-xl bg-black px-4 py-3 text-sm font-medium text-white hover:opacity-90"
-            >
-              Proceed to Checkout
-            </button>
-
             <Link
-              href="/products"
-              className="mt-2 inline-flex w-full items-center justify-center rounded-xl border border-neutral-300 px-4 py-3 text-sm font-medium hover:bg-neutral-50"
+            href="/checkout"
+            className="mt-4 block w-full rounded-xl bg-black px-4 py-3 text-center text-sm font-medium text-white hover:opacity-90"
             >
+            Proceed to Checkout
+            </Link>
+
+
+            <Link href="/products" className="mt-2 inline-flex w-full items-center justify-center rounded-xl border border-neutral-300 px-4 py-3 text-sm font-medium hover:bg-neutral-50">
               Continue Shopping
             </Link>
           </div>
 
-          {/* Perks */}
           <ul className="mt-4 grid gap-3 text-sm text-neutral-700 sm:grid-cols-2">
-            <li className="rounded-xl border border-neutral-200 bg-white p-3">
-              🚚 Same-day delivery (Colombo)
-            </li>
-            <li className="rounded-xl border border-neutral-200 bg-white p-3">
-              💳 Cash / Card on delivery
-            </li>
-            <li className="rounded-xl border border-neutral-200 bg-white p-3">
-              🥘 Freshly cooked to order
-            </li>
-            <li className="rounded-xl border border-neutral-200 bg-white p-3">
-              ⭐ 4.9/5 customer reviews
-            </li>
+            <li className="rounded-xl border border-neutral-200 bg-white p-3">🚚 Same-day delivery (Colombo)</li>
+            <li className="rounded-xl border border-neutral-200 bg-white p-3">💳 Cash / Card on delivery</li>
+            <li className="rounded-xl border border-neutral-200 bg-white p-3">🥘 Freshly cooked to order</li>
+            <li className="rounded-xl border border-neutral-200 bg-white p-3">⭐ 4.9/5 customer reviews</li>
           </ul>
         </aside>
       </div>
-     
     </div>
-     <Footer/>
-    </>
   );
 }

@@ -1,13 +1,31 @@
-// src/hooks/useCart.ts
 import { create } from "zustand";
 import { persist, createJSONStorage } from "zustand/middleware";
+
+/** ----- user key helpers ----- */
+const ANON_KEY = "cart:anonId";
+const AUTH_UID_KEY = "auth:uid";
+
+function ensureAnonId(): string {
+  if (typeof window === "undefined") return "anon-ssr";
+  let id = localStorage.getItem(ANON_KEY);
+  if (!id) {
+    id = `anon-${Math.random().toString(36).slice(2, 10)}`;
+    localStorage.setItem(ANON_KEY, id);
+  }
+  return id;
+}
+
+export function getUserKey(): string {
+  if (typeof window === "undefined") return "anon-ssr";
+  return localStorage.getItem(AUTH_UID_KEY) || ensureAnonId();
+}
 
 export type CartItem = {
   id: string;
   slug: string;
   name: string;
   image?: string;
-  unitPrice: number; // actual per-unit price charged
+  unitPrice: number;
   qty: number;
   stock?: number;
 };
@@ -26,45 +44,44 @@ type ProductInput = {
 };
 
 type CartState = {
-  // set to true by default; if you want a hydration gate, toggle it via onRehydrateStorage
-  isReady: boolean;
   items: CartItem[];
-
-  add: (p: ProductInput, qty?: number) => void;
-  setQty: (slug: string, qty: number) => void;
-  remove: (slug: string) => void;
-  clear: () => void;
-
-  subtotal: () => number;
-  totalItems: () => number;
+  add: (p: ProductInput, qty?: number) => void;       // C (Create)
+  setQty: (slug: string, qty: number) => void;        // U (Update)
+  remove: (slug: string) => void;                     // D (Delete)
+  clear: () => void;                                  // D (Delete all)
+  subtotal: () => number;                             // R (Read aggregate)
+  totalItems: () => number;                           // R (Read aggregate)
 };
 
-// robust unit price: prefers finalPrice, else (price - promotion), clamped >= 0
 function computeUnitPrice(p: { finalPrice?: number; price: number; promotion?: number }) {
   const base = p.finalPrice ?? (Number(p.price) - Number(p.promotion ?? 0));
   const num = Number(base);
   return Math.max(0, Number.isFinite(num) ? num : 0);
 }
 
+/** storage that appends :<userKey> to persist name */
+const userScopedStorage = createJSONStorage(() => ({
+  getItem: (name: string) => localStorage.getItem(`${name}:${getUserKey()}`),
+  setItem: (name: string, value: string) => localStorage.setItem(`${name}:${getUserKey()}`, value),
+  removeItem: (name: string) => localStorage.removeItem(`${name}:${getUserKey()}`),
+}));
+
 export const useCart = create<CartState>()(
   persist(
     (set, get) => ({
-      isReady: true, // set to true; if you need SSR guards, you can flip this via onRehydrateStorage
       items: [],
 
       add: (p, q = 1) => {
         const qty = Math.max(1, q);
-        const slug = p.slug;
         const items = [...get().items];
-        const i = items.findIndex((x) => x.slug === slug);
-
-        if (i >= 0) {
-          const max = items[i].stock ?? p.stock ?? Infinity;
-          items[i] = { ...items[i], qty: Math.min(items[i].qty + qty, max) };
+        const idx = items.findIndex((x) => x.slug === p.slug);
+        if (idx >= 0) {
+          const max = items[idx].stock ?? p.stock ?? Infinity;
+          items[idx] = { ...items[idx], qty: Math.min(items[idx].qty + qty, max) };
         } else {
           items.push({
-            id: String(p.id ?? p._id ?? slug),
-            slug,
+            id: String(p.id ?? p._id ?? p.slug),
+            slug: p.slug,
             name: p.name,
             image: p.image ?? p.images?.[0],
             unitPrice: computeUnitPrice(p),
@@ -85,35 +102,27 @@ export const useCart = create<CartState>()(
       },
 
       remove: (slug) => set({ items: get().items.filter((x) => x.slug !== slug) }),
-
       clear: () => set({ items: [] }),
 
       subtotal: () => get().items.reduce((s, i) => s + i.unitPrice * i.qty, 0),
-
       totalItems: () => get().items.reduce((n, i) => n + i.qty, 0),
     }),
     {
       name: "cart:v2",
       version: 2,
-      storage: createJSONStorage(() => localStorage),
-
-      // migrate from v1 (or empty) and from legacy localStorage key "cart"
-      migrate: (persisted: any, _version) => {
-        // If we already have a valid v2 state, keep it.
+      storage: userScopedStorage,
+      partialize: (s) => ({ items: s.items }),
+      migrate: (persisted: any) => {
         if (persisted && Array.isArray(persisted.items)) return persisted;
-
-        // Try to migrate legacy "cart" array shape:
         try {
           const legacyRaw = localStorage.getItem("cart");
           if (legacyRaw) {
             const legacy = JSON.parse(legacyRaw);
             if (Array.isArray(legacy) && legacy.length) {
               const items: CartItem[] = legacy.map((it: any) => {
-                // safe unit price from legacy item
                 const base = it?.finalPrice ?? (Number(it?.price) - Number(it?.promotion ?? 0));
                 const num = Number(base);
                 const unitPrice = Math.max(0, Number.isFinite(num) ? num : 0);
-
                 return {
                   id: String(it.id ?? it._id ?? it.slug),
                   slug: String(it.slug),
@@ -124,24 +133,13 @@ export const useCart = create<CartState>()(
                   stock: it.stock,
                 };
               });
-
-              // clean up old key after successful migration
               localStorage.removeItem("cart");
-              return { items, isReady: true };
+              return { items };
             }
           }
-        } catch {
-          // ignore migration errors, fall through to empty state
-        }
-
-        return { items: [], isReady: true };
+        } catch {}
+        return { items: [] };
       },
-
-      // If you want to flip isReady after hydration, uncomment this:
-      // onRehydrateStorage: () => () => useCart.setState({ isReady: true }),
-
-      // Only persist items (not methods)
-      partialize: (state) => ({ items: state.items }),
     }
   )
 );
