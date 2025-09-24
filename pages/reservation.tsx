@@ -163,7 +163,7 @@ export default function ReservationPage() {
 
                 {/* 🆕 Amount */}
                 <div>
-                  <label className="block text-sm font-medium">Amount (LKR)</label>
+                  <label className="block text-sm font-medium">Amount </label>
                   <input type="number"
                          className="mt-1 w-full rounded-xl border px-3 h-11"
                          min={0}
