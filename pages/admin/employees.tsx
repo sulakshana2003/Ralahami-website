@@ -4,6 +4,9 @@
 import useSWR from "swr";
 import { useMemo, useState } from "react";
 import DashboardLayout from "../components/DashboardLayout";
+import { useSession, signIn } from "next-auth/react";
+import AdminGuard from "../components/AdminGuard"
+
 
 // ---------- utils ----------
 const fetcher = async (url: string) => {
@@ -186,6 +189,7 @@ export default function EmployeeAdminPage() {
   }
 
   return (
+    <AdminGuard>
     <DashboardLayout>
       {/* Header */}
       <div className="mb-6 flex items-center justify-between">
@@ -374,5 +378,6 @@ export default function EmployeeAdminPage() {
         </div>
       </section>
     </DashboardLayout>
+    </AdminGuard>
   );
 }

@@ -2,6 +2,7 @@
 import useSWR from "swr";
 import { useMemo, useState } from "react";
 import DashboardLayout from "../components/DashboardLayout"; // ✅ same layout as Products
+import AdminGuard from "../components/AdminGuard"
 
 // ---------- utils ----------
 const fetcher = async (url: string) => {
@@ -199,6 +200,7 @@ export default function ReservationAdminPage() {
   }
 
   return (
+    <AdminGuard>
     <DashboardLayout>
       {/* Header */}
       <div className="mb-6 flex items-center justify-between">
@@ -356,5 +358,6 @@ export default function ReservationAdminPage() {
         </form>
       </Modal>
     </DashboardLayout>
+    </AdminGuard>
   );
 }

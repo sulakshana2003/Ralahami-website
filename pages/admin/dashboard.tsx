@@ -1,7 +1,9 @@
 import DashboardLayout from "../components/DashboardLayout";
+import AdminGuard from "../components/AdminGuard";
 
 export default function AdminDashboard() {
   return (
+    <AdminGuard>
     <DashboardLayout>
       <h1 className="text-2xl font-bold mb-6">Dashboard Overview</h1>
 
@@ -60,6 +62,7 @@ export default function AdminDashboard() {
         </div>
       </div>
     </DashboardLayout>
+    </AdminGuard>
   );
 }
 

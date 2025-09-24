@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 
 "use client";
 import { useEffect, useRef } from "react";
@@ -28,8 +29,8 @@ export default function AdminAutoRedirect() {
 // inside useEffect, where it currently has:
 if (role === "admin") {
   if (router.pathname === "/" || router.pathname === "/login") {
--   router.replace("/admin");
-+   router.replace("/admin");           // 👈 send to menu instead
+-   router.replace("/admin/dashboard");
++router.replace("/admin/dashboard");           // 👈 send to menu instead
   }
 }
 
@@ -42,7 +43,7 @@ if (role === "admin") {
         const fresh = await update();
         const freshRole = (fresh?.user as any)?.role;
         if (freshRole === "admin") {
-          router.replace("/admin");
+          router.replace("/admin/dashboard");
         }
       })();
     }

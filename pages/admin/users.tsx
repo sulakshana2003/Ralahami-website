@@ -1,26 +1,20 @@
-
 // pages/admin/users.tsx
+/* eslint-disable @typescript-eslint/no-explicit-any */
+"use client";
+
 import { useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
-import { useSession, signIn, signOut } from "next-auth/react";
-import AdminLayout from "../components/AdminLayout";
+import { useSession, signIn, } from "next-auth/react";
+import DashboardLayout from "../components/DashboardLayout";
 
-// ---------- small utils ----------
+// ---------- utils ----------
 const fetcher = (url: string) =>
   fetch(url, { credentials: "same-origin" }).then(async (r) => {
     if (!r.ok) throw new Error(await r.text());
     return r.json();
   });
 
-function useDebounced<T>(value: T, delay = 400) {
-  const [v, setV] = useState(value);
-  useEffect(() => {
-    const id = setTimeout(() => setV(value), delay);
-    return () => clearTimeout(id);
-  }, [value, delay]);
-  return v;
-}
-
+// ---------- types ----------
 type Role = "user" | "admin";
 type UserItem = {
   _id: string;
@@ -29,59 +23,73 @@ type UserItem = {
   role: Role;
   isActive: boolean;
   createdAt: string;
-  updatedAt: string;
 };
 
-// ---------- subcomponents (UI only) ----------
-function Badge({ children, tone = "muted" }: { children: React.ReactNode; tone?: "success" | "danger" | "muted" }) {
-  const tones: Record<string, string> = {
+// ---------- UI atoms ----------
+function Button({
+  children,
+  tone = "primary",
+  ...props
+}: React.ButtonHTMLAttributes<HTMLButtonElement> & {
+  tone?: "primary" | "ghost" | "danger";
+}) {
+  const styles = {
+    primary: "bg-indigo-600 text-white hover:bg-indigo-700",
+    ghost:
+      "border border-neutral-200 bg-white text-neutral-700 hover:bg-neutral-50",
+    danger: "border border-rose-200 bg-white text-rose-600 hover:bg-rose-50",
+  };
+  return (
+    <button
+      {...props}
+      className={`px-4 py-2 rounded-lg text-sm font-medium shadow-sm active:scale-[.98] transition ${
+        styles[tone]
+      } ${props.className || ""}`}
+    >
+      {children}
+    </button>
+  );
+}
+function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
+  return (
+    <input
+      {...props}
+      className={`h-11 w-full rounded-xl border border-neutral-300 bg-white px-3 text-sm focus:ring-2 focus:ring-indigo-200 ${
+        props.className || ""
+      }`}
+    />
+  );
+}
+function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
+  return (
+    <select
+      {...props}
+      className={`h-11 w-full rounded-xl border border-neutral-300 bg-white px-3 text-sm focus:ring-2 focus:ring-indigo-200 ${
+        props.className || ""
+      }`}
+    />
+  );
+}
+function Badge({
+  children,
+  tone = "muted",
+}: {
+  children: React.ReactNode;
+  tone?: "success" | "danger" | "muted";
+}) {
+  const map: Record<string, string> = {
     success: "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200",
     danger: "bg-rose-50 text-rose-700 ring-1 ring-rose-200",
     muted: "bg-neutral-100 text-neutral-700 ring-1 ring-neutral-200",
   };
   return (
-    <span className={`inline-flex items-center rounded-full px-2.5 py-1 text-xs font-medium ${tones[tone]}`}>
+    <span
+      className={`inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium ${map[tone]}`}
+    >
       {children}
     </span>
   );
 }
-
-function IconButton(props: React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  return (
-    <button
-      {...props}
-      className={`rounded-xl border border-neutral-200 bg-white px-3 py-2 text-sm font-medium shadow-sm hover:bg-neutral-50 active:scale-[.98] transition ${props.className || ""}`}
-    />
-  );
-}
-
-function PrimaryButton(props: React.ButtonHTMLAttributes<HTMLButtonElement>) {
-  return (
-    <button
-      {...props}
-      className={`rounded-xl bg-indigo-600 px-4 py-2 text-sm font-medium text-white shadow-sm hover:bg-indigo-700 active:scale-[.98] transition ${props.className || ""}`}
-    />
-  );
-}
-
-function TextInput(props: React.InputHTMLAttributes<HTMLInputElement>) {
-  return (
-    <input
-      {...props}
-      className={`h-11 w-full rounded-xl border border-neutral-300 bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-indigo-200 ${props.className || ""}`}
-    />
-  );
-}
-
-function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
-  return (
-    <select
-      {...props}
-      className={`h-11 w-full rounded-xl border border-neutral-300 bg-white px-3 text-sm outline-none focus:ring-2 focus:ring-indigo-200 ${props.className || ""}`}
-    />
-  );
-}
-
 function Modal({
   open,
   onClose,
@@ -98,335 +106,287 @@ function Modal({
   if (!open) return null;
   return (
     <div className="fixed inset-0 z-50">
-      <div className="absolute inset-0 bg-black/30" onClick={onClose} />
+      <div className="absolute inset-0 bg-black/40" onClick={onClose} />
       <div className="absolute inset-0 flex items-center justify-center p-4">
-        <div className="w-full max-w-xl rounded-2xl bg-white p-5 shadow-xl">
-          <div className="mb-3 flex items-center justify-between">
+        <div className="w-full max-w-xl rounded-2xl bg-white p-6 shadow-xl">
+          <div className="mb-4 flex items-center justify-between border-b pb-2">
             <h3 className="text-lg font-semibold">{title}</h3>
-            <button onClick={onClose} className="text-sm text-neutral-500 hover:text-black">✕</button>
+            <button
+              onClick={onClose}
+              className="text-neutral-500 hover:text-black"
+            >
+              ✕
+            </button>
           </div>
           <div className="space-y-4">{children}</div>
-          {footer && <div className="mt-6 flex justify-end gap-2">{footer}</div>}
+          {footer && (
+            <div className="mt-6 flex justify-end gap-2">{footer}</div>
+          )}
         </div>
       </div>
     </div>
   );
 }
-
-function SkeletonRow() {
+function StatCard({ title, value }: { title: string; value: string | number }) {
   return (
-    <tr className="animate-pulse">
-      {Array.from({ length: 5 }).map((_, i) => (
-        <td key={i} className="p-4">
-          <div className="h-4 w-full rounded bg-neutral-200" />
-        </td>
-      ))}
-    </tr>
+    <div className="bg-white rounded-xl shadow p-4">
+      <div className="text-sm text-neutral-500">{title}</div>
+      <div className="text-2xl font-bold mt-1">{value}</div>
+    </div>
   );
 }
 
-// ---------- main page ----------
-function AdminUsersPageInner() {
+// ---------- main ----------
+export default function UsersPage() {
   const { status } = useSession();
-  const [q, setQ] = useState("");
-  const debouncedQ = useDebounced(q);
-  const [page, setPage] = useState(1);
-  const limit = 10;
-
-  // create modal state
-  const [isCreateOpen, setCreateOpen] = useState(false);
-  const [form, setForm] = useState<{ name: string; email: string; password: string; role: Role }>({
-    name: "",
-    email: "",
-    password: "",
-    role: "user",
-  });
-
-  const url = useMemo(
-    () => `/api/users?q=${encodeURIComponent(debouncedQ)}&page=${page}&limit=${limit}`,
-    [debouncedQ, page]
-  );
-  const { data, mutate, isLoading, error } = useSWR(url, fetcher);
-
   useEffect(() => {
     if (status === "unauthenticated") signIn();
   }, [status]);
 
+  const [q, setQ] = useState("");
+  const [page, setPage] = useState(1);
+  const limit = 10;
+
+  const [isOpen, setOpen] = useState(false);
+  const [editing, setEditing] = useState<UserItem | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [f, setF] = useState<any>({
+    name: "",
+    email: "",
+    password: "",
+    role: "user",
+    isActive: true,
+  });
+
+  const url = useMemo(
+    () => `/api/users?q=${encodeURIComponent(q)}&page=${page}&limit=${limit}`,
+    [q, page]
+  );
+  const { data, mutate, isLoading, error } = useSWR(url, fetcher);
+
   const items: UserItem[] = data?.items ?? [];
   const pages: number = data?.pages ?? 1;
 
-  async function changeRole(id: string, role: Role) {
-    const res = await fetch(`/api/users/${id}`, {
-      method: "PATCH",
+  // actions
+  async function save() {
+    const payload = { ...f };
+    const url = editing ? `/api/users/${editing._id}` : `/api/users`;
+    const method = editing ? "PUT" : "POST";
+    setBusy(true);
+    const res = await fetch(url, {
+      method,
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ role }),
-      credentials: "same-origin",
+      body: JSON.stringify(payload),
     });
-    if (!res.ok) alert(await res.text());
-    await mutate();
-  }
-
-  async function toggleActive(id: string, current: boolean) {
-    const res = await fetch(`/api/users/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ isActive: !current }),
-      credentials: "same-origin",
-    });
-    if (!res.ok) alert(await res.text());
-    await mutate();
-  }
-
-  async function resetPassword(id: string) {
-    const newPassword = prompt("New password:");
-    if (!newPassword) return;
-    const res = await fetch(`/api/users/${id}`, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ newPassword }),
-      credentials: "same-origin",
-    });
-    if (!res.ok) alert(await res.text());
+    setBusy(false);
+    if (!res.ok) return alert(await res.text());
+    setOpen(false);
+    setEditing(null);
     await mutate();
   }
 
   async function remove(id: string) {
-    if (!confirm("Delete this user?")) return;
-    const res = await fetch(`/api/users/${id}`, { method: "DELETE", credentials: "same-origin" });
-    if (!res.ok) alert(await res.text());
-    await mutate();
-  }
-
-  async function createUser() {
-    if (!form.name || !form.email || !form.password) {
-      alert("Name, email and password are required");
-      return;
-    }
-    const res = await fetch(`/api/users`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-      credentials: "same-origin",
-    });
-    if (!res.ok) {
-      alert(await res.text());
-      return;
-    }
-    setForm({ name: "", email: "", password: "", role: "user" });
-    setCreateOpen(false);
+    if (!confirm("Delete user?")) return;
+    const res = await fetch(`/api/users/${id}`, { method: "DELETE" });
+    if (!res.ok) return alert(await res.text());
     await mutate();
   }
 
   return (
-    <>
-      {/* Page header row (inside the content surface from the layout) */}
-      <div className="flex items-center justify-between border-b border-neutral-200 px-5 py-4">
+    <DashboardLayout>
+      {/* Header */}
+      <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-base font-semibold">User Management</h1>
-          <p className="text-xs text-neutral-500">Manage roles, passwords and accounts</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <PrimaryButton onClick={() => setCreateOpen(true)}>+ New User</PrimaryButton>
-          <button
-            onClick={() => signOut({ callbackUrl: "/" })}
-            className="rounded-xl border border-neutral-200 bg-white px-4 py-2 text-sm font-medium text-neutral-700 shadow-sm hover:bg-neutral-50 active:scale-[.98] transition"
-          >
-            Logout
-          </button>
+          <h1 className="text-2xl font-bold">User Management</h1>
+          <p className="text-sm text-neutral-500">
+            Manage accounts, roles & activity
+          </p>
         </div>
       </div>
 
-      {/* Controls */}
-      <div className="grid gap-3 border-b border-neutral-100 px-5 py-4 sm:grid-cols-2">
-        <TextInput
-          placeholder="Search by name or email…"
+      {/* Stats */}
+      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+        <StatCard title="Total Users" value={items.length} />
+        <StatCard
+          title="Admins"
+          value={items.filter((u) => u.role === "admin").length}
+        />
+        <StatCard
+          title="Active"
+          value={items.filter((u) => u.isActive).length}
+        />
+        <StatCard
+          title="Blocked"
+          value={items.filter((u) => !u.isActive).length}
+        />
+      </div>
+
+      {/* Search */}
+      <div className="mb-4 flex gap-3">
+        <Input
+          placeholder="Search by name or email..."
           value={q}
           onChange={(e) => {
             setQ(e.target.value);
             setPage(1);
           }}
         />
-        <div className="flex items-center gap-2">
-          <IconButton onClick={() => mutate()}>Refresh</IconButton>
-        </div>
+        <Button tone="ghost" onClick={() => mutate()}>
+          Refresh
+        </Button>
       </div>
 
-      {/* Table / Cards */}
-      <div className="p-3">
-        <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white shadow-sm">
-          <div className="hidden md:block">
-            <table className="w-full border-collapse">
-              <thead className="bg-neutral-50 text-left text-xs uppercase tracking-wide text-neutral-600">
-                <tr>
-                  <th className="px-4 py-3 font-medium">Name</th>
-                  <th className="px-4 py-3 font-medium">Email</th>
-                  <th className="px-4 py-3 font-medium">Role</th>
-                  {/* <th className="px-4 py-3 font-medium">Status</th> */}
-                  <th className="px-4 py-3 font-medium">Actions</th>
+      {/* Table */}
+      <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
+        <table className="w-full text-sm">
+          <thead className="bg-neutral-50 text-neutral-600">
+            <tr>
+              <th className="px-4 py-2 text-left">Name</th>
+              <th>Email</th>
+              <th>Role</th>
+              <th>Status</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody>
+            {isLoading ? (
+              <tr>
+                <td colSpan={5} className="p-6 text-center text-neutral-500">
+                  Loading…
+                </td>
+              </tr>
+            ) : error ? (
+              <tr>
+                <td colSpan={5} className="p-6 text-center text-rose-600">
+                  {(error as any).message}
+                </td>
+              </tr>
+            ) : items.length === 0 ? (
+              <tr>
+                <td colSpan={5} className="p-6 text-center text-neutral-500">
+                  No users found
+                </td>
+              </tr>
+            ) : (
+              items.map((u) => (
+                <tr key={u._id} className="border-t">
+                  <td className="px-4 py-3">{u.name}</td>
+                  <td>{u.email}</td>
+                  <td>
+                    <Select
+                      value={u.role}
+                      onChange={async (e) => {
+                        await fetch(`/api/users/${u._id}`, {
+                          method: "PATCH",
+                          headers: { "Content-Type": "application/json" },
+                          body: JSON.stringify({ role: e.target.value }),
+                        });
+                        mutate();
+                      }}
+                    >
+                      <option value="user">user</option>
+                      <option value="admin">admin</option>
+                    </Select>
+                  </td>
+                  <td>
+                    {u.isActive ? (
+                      <Badge tone="success">Active</Badge>
+                    ) : (
+                      <Badge tone="danger">Blocked</Badge>
+                    )}
+                  </td>
+                  <td className="flex gap-2">
+                    <Button tone="danger" onClick={() => remove(u._id)}>
+                      Delete
+                    </Button>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {isLoading
-                  ? Array.from({ length: 6 }).map((_, i) => <SkeletonRow key={i} />)
-                  : items.length === 0
-                  ? (
-                    <tr>
-                      <td colSpan={5} className="p-8 text-center text-sm text-neutral-500">
-                        {error ? "Error loading users" : "No users found"}
-                      </td>
-                    </tr>
-                    )
-                  : items.map((u) => (
-                      <tr key={u._id} className="border-t border-neutral-100">
-                        <td className="px-4 py-4">
-                          <div className="font-medium">{u.name}</div>
-                          <div className="text-xs text-neutral-500">ID: {u._id}</div>
-                        </td>
-                        <td className="px-4 py-4">{u.email}</td>
-                        <td className="px-4 py-4">
-                          <Select
-                            value={u.role}
-                            onChange={(e) => changeRole(u._id, e.target.value as Role)}
-                            aria-label="Change role"
-                            className="h-9 w-32"
-                          >
-                            <option value="user">user</option>
-                            <option value="admin">admin</option>
-                          </Select>
-                        </td>
-                        {/* <td className="px-4 py-4">
-                          {u.isActive ? <Badge tone="success">active</Badge> : <Badge tone="danger">blocked</Badge>}
-                        </td> */}
-                        <td className="px-4 py-4">
-                          <div className="flex flex-wrap gap-2">
-                            {/* <IconButton onClick={() => toggleActive(u._id, u.isActive)}>
-                              {u.isActive ? "Block" : "Unblock"}
-                            </IconButton> */}
-                            <IconButton onClick={() => resetPassword(u._id)}>Reset Password</IconButton>
-                            <IconButton className="border-rose-200 hover:bg-rose-50" onClick={() => remove(u._id)}>
-                              Delete
-                            </IconButton>
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-              </tbody>
-            </table>
-          </div>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
 
-          {/* Mobile cards */}
-          <div className="grid gap-3 p-3 md:hidden">
-            {isLoading
-              ? Array.from({ length: 4 }).map((_, i) => (
-                  <div key={i} className="animate-pulse rounded-xl border border-neutral-200 bg-white p-4">
-                    <div className="mb-3 h-4 w-2/3 rounded bg-neutral-200" />
-                    <div className="mb-2 h-3 w-1/2 rounded bg-neutral-200" />
-                    <div className="h-3 w-1/3 rounded bg-neutral-200" />
-                  </div>
-                ))
-              : items.length === 0
-              ? (
-                <div className="p-6 text-center text-sm text-neutral-500">
-                  {error ? "Error loading users" : "No users found"}
-                </div>
-                )
-              : items.map((u) => (
-                  <div key={u._id} className="rounded-xl border border-neutral-200 bg-white p-4 shadow-sm">
-                    <div className="flex items-start justify-between gap-2">
-                      <div>
-                        <div className="font-medium">{u.name}</div>
-                        <div className="text-xs text-neutral-500">{u.email}</div>
-                      </div>
-                      <Badge tone={u.isActive ? "success" : "danger"}>{u.isActive ? "active" : "blocked"}</Badge>
-                    </div>
-                    <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                      <Select
-                        value={u.role}
-                        onChange={(e) => changeRole(u._id, e.target.value as Role)}
-                        className="h-9"
-                      >
-                        <option value="user">user</option>
-                        <option value="admin">admin</option>
-                      </Select>
-                      <div className="flex flex-wrap gap-2">
-                        {/* <IconButton onClick={() => toggleActive(u._id, u.isActive)}>
-                          {u.isActive ? "Block" : "Unblock"}
-                        </IconButton> */}
-                        <IconButton onClick={() => resetPassword(u._id)}>Reset</IconButton>
-                        <IconButton className="border-rose-200 hover:bg-rose-50" onClick={() => remove(u._id)}>
-                          Delete
-                        </IconButton>
-                      </div>
-                    </div>
-                  </div>
-                ))}
-          </div>
-        </div>
-
-        {/* Pagination */}
-        <div className="mt-4 flex items-center justify-between px-2">
-          <p className="text-sm text-neutral-500">
-            Page <span className="font-medium text-neutral-800">{page}</span> of{" "}
-            <span className="font-medium text-neutral-800">{pages}</span>
-          </p>
-          <div className="flex gap-2">
-            <IconButton disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>
-              Prev
-            </IconButton>
-            <IconButton disabled={page >= pages} onClick={() => setPage((p) => Math.min(pages, p + 1))}>
-              Next
-            </IconButton>
-          </div>
+      {/* Pagination */}
+      <div className="mt-4 flex justify-between text-sm">
+        <span>
+          Page {page} of {pages}
+        </span>
+        <div className="flex gap-2">
+          <Button
+            tone="ghost"
+            disabled={page <= 1}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+          >
+            Prev
+          </Button>
+          <Button
+            tone="ghost"
+            disabled={page >= pages}
+            onClick={() => setPage((p) => Math.min(pages, p + 1))}
+          >
+            Next
+          </Button>
         </div>
       </div>
 
-      {/* Create Modal */}
+      {/* Modal */}
       <Modal
-        open={isCreateOpen}
-        onClose={() => setCreateOpen(false)}
-        title="Create new user"
+        open={isOpen}
+        onClose={() => {
+          setOpen(false);
+          setEditing(null);
+        }}
+        title={editing ? `Edit User` : "Create User"}
         footer={
           <>
-            <IconButton onClick={() => setCreateOpen(false)}>Cancel</IconButton>
-            <PrimaryButton onClick={createUser}>Create</PrimaryButton>
+            <Button tone="ghost" onClick={() => setOpen(false)}>
+              Cancel
+            </Button>
+            <Button onClick={save} disabled={busy}>
+              {editing ? "Save" : "Create"}
+            </Button>
           </>
         }
       >
         <div className="grid gap-3 sm:grid-cols-2">
-          <TextInput
+          <Input
             placeholder="Full name"
-            value={form.name}
-            onChange={(e) => setForm((f) => ({ ...f, name: e.target.value }))}
+            value={f.name}
+            onChange={(e) => setF({ ...f, name: e.target.value })}
           />
-          <TextInput
-            placeholder="Email address"
+          <Input
+            placeholder="Email"
             type="email"
-            value={form.email}
-            onChange={(e) => setForm((f) => ({ ...f, email: e.target.value }))}
+            value={f.email}
+            onChange={(e) => setF({ ...f, email: e.target.value })}
           />
-          <TextInput
-            placeholder="Password"
-            type="password"
-            value={form.password}
-            onChange={(e) => setForm((f) => ({ ...f, password: e.target.value }))}
-          />
+          {!editing && (
+            <Input
+              placeholder="Password"
+              type="password"
+              value={f.password}
+              onChange={(e) => setF({ ...f, password: e.target.value })}
+            />
+          )}
           <Select
-            value={form.role}
-            onChange={(e) => setForm((f) => ({ ...f, role: e.target.value as Role }))}
+            value={f.role}
+            onChange={(e) => setF({ ...f, role: e.target.value as Role })}
           >
             <option value="user">user</option>
             <option value="admin">admin</option>
           </Select>
+          <Select
+            value={String(f.isActive)}
+            onChange={(e) =>
+              setF({ ...f, isActive: e.target.value === "true" })
+            }
+          >
+            <option value="true">Active</option>
+            <option value="false">Blocked</option>
+          </Select>
         </div>
       </Modal>
-    </>
-  );
-}
-
-export default function UsersPage() {
-  return (
-    <AdminLayout>
-      <AdminUsersPageInner />
-    </AdminLayout>
+    </DashboardLayout>
   );
 }
