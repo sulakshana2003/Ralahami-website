@@ -50,7 +50,7 @@ const ProductsPage: React.FC<Props> = ({ products }) => {
         {/* Background video (put /public/videos/hero-bg.mp4) */}
         <video
           className="absolute inset-0 w-full h-full object-cover"
-          src="/videos/hero-bg.mp4"
+          src="/videos/prodB.mp4"
           autoPlay
           muted
           loop
