@@ -11,10 +11,12 @@
   "dependencies": {
     "bcrypt": "^6.0.0",
     "bcryptjs": "^3.0.2",
-<<<<<<< HEAD
+    "canvas": "^3.2.0",
+    "canvas-confetti": "^1.9.3",
+    "chart.js": "^4.5.0",
     "date-fns": "^4.1.0",
-=======
->>>>>>> a168ab517fac2cb2d91aecc12ec0298bc02f647c
+    "jspdf": "^3.0.3",
+    "jspdf-autotable": "^5.0.2",
     "lucide-react": "^0.544.0",
     "mongoose": "^8.17.1",
     "next": "15.4.6",
@@ -31,6 +33,7 @@
   "devDependencies": {
     "@eslint/eslintrc": "^3",
     "@tailwindcss/postcss": "^4",
+    "@types/canvas-confetti": "^1.9.0",
     "@types/node": "^20",
     "@types/react": "^19",
     "@types/react-dom": "^19",
