@@ -31,6 +31,13 @@ type ProductItem = {
 type Props = { products: ProductItem[] };
 
 const ProductsPage: React.FC<Props> = ({ products }) => {
+  const [searchQuery, setSearchQuery] = React.useState("");
+
+  // filter products by name
+  const filteredProducts = products.filter((p) =>
+    p.name.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
   return (
     <>
       <Head>
@@ -38,48 +45,78 @@ const ProductsPage: React.FC<Props> = ({ products }) => {
       </Head>
       <Navbar />
 
-      {/* --- Hero Section --- */}
-      <section
-        className="relative min-h-[90vh] flex flex-col items-center justify-center 
-        bg-gradient-to-br from-amber-50 via-orange-100 to-rose-100 px-4 text-center"
-      >
-        <motion.h1
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
-          className="text-5xl font-extrabold text-neutral-800"
-        >
-          Delicious Food Is Waiting For You
-        </motion.h1>
-        <motion.p
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.3, duration: 0.8 }}
-          className="mt-4 max-w-xl text-neutral-600"
-        >
-          Our team of chefs bring you the best Sri Lankan & fusion flavors
-          straight to your table.
-        </motion.p>
+      {/* ===== Hero Section with Video Background ===== */}
+      <section className="relative h-screen w-full flex flex-col items-center justify-center text-center overflow-hidden">
+        {/* Background video (put /public/videos/hero-bg.mp4) */}
+        <video
+          className="absolute inset-0 w-full h-full object-cover"
+          src="/videos/hero-bg.mp4"
+          autoPlay
+          muted
+          loop
+          playsInline
+        />
+        {/* Dark overlay for contrast */}
+        <div className="absolute inset-0 bg-black/40" />
 
-        <div className="mt-6 flex gap-4">
-          <motion.a
-            whileHover={{ scale: 1.05 }}
-            href="#menu"
-            className="rounded-full bg-amber-600 px-6 py-3 text-white font-semibold shadow-md hover:bg-amber-700"
+        {/* Foreground content */}
+        <div className="relative z-10 px-4">
+          <motion.h1
+            initial={{ opacity: 0, y: 30 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.8 }}
+            className="text-5xl md:text-6xl font-extrabold text-white"
           >
-            Food Menu
-          </motion.a>
-          <motion.a
-            whileHover={{ scale: 1.05 }}
-            href="/booking"
-            className="rounded-full bg-white px-6 py-3 text-amber-600 font-semibold border border-amber-400 shadow-sm hover:bg-amber-50"
+            Delicious Food Is Waiting For You
+          </motion.h1>
+
+          <motion.p
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.3, duration: 0.8 }}
+            className="mt-4 max-w-xl mx-auto text-neutral-100"
           >
-            Book a Table
-          </motion.a>
+            Our team of chefs bring you the best Sri Lankan & fusion flavors
+            straight to your table.
+          </motion.p>
+
+          {/* Search bar */}
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            transition={{ delay: 0.6 }}
+            className="mt-8 flex justify-center"
+          >
+            <input
+              type="text"
+              placeholder="Search dishes..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-72 rounded-full px-5 py-3 text-black focus:outline-none focus:ring-2 focus:ring-amber-400"
+            />
+          </motion.div>
+
+          {/* Hero buttons */}
+          <div className="mt-6 flex gap-4 justify-center">
+            <motion.a
+              whileHover={{ scale: 1.05 }}
+              href="#menu"
+              className="rounded-full bg-amber-600 px-6 py-3 text-white font-semibold shadow-md hover:bg-amber-700"
+            >
+              Food Menu
+            </motion.a>
+            <motion.a
+              whileHover={{ scale: 1.05 }}
+              href="/booking"
+              className="rounded-full bg-white px-6 py-3 text-amber-600 font-semibold border border-amber-400 shadow-sm hover:bg-amber-50"
+            >
+              Book a Table
+            </motion.a>
+          </div>
         </div>
       </section>
 
-      {/* --- Menu Grid --- */}
+      {/* ===== Menu Grid ===== */}
       <section
         id="menu"
         className="relative z-10 bg-gradient-to-br from-white via-amber-50 to-white
@@ -101,7 +138,7 @@ const ProductsPage: React.FC<Props> = ({ products }) => {
           whileInView="show"
           viewport={{ once: true }}
         >
-          {products.map((p) => (
+          {filteredProducts.map((p) => (
             <motion.div
               key={p.id}
               initial={{ opacity: 0, y: 40 }}
@@ -114,7 +151,7 @@ const ProductsPage: React.FC<Props> = ({ products }) => {
         </motion.div>
       </section>
 
-      {/* --- Services Footer-style row --- */}
+      {/* ===== Services Row ===== */}
       <section className="bg-gradient-to-r from-amber-50 via-white to-rose-50 py-12">
         <div className="max-w-5xl mx-auto grid grid-cols-2 sm:grid-cols-4 gap-6 text-center">
           <div className="flex flex-col items-center">
