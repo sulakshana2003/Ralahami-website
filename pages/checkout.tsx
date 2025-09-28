@@ -149,6 +149,48 @@ export default function CheckoutPage() {
         promoCode: form.promo.trim() || null,
       },
     };
+// Offline payments (COD or Card on Delivery):
+try {
+  const res = await fetch("/api/orders/create", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      // we store the money you collect from the customer:
+      revenue: total,
+      // if you know your kitchen/packaging cost, pass it here; otherwise keep 0 for now:
+      cost: 0,
+      // optional note snapshot (customer notes, fulfilment):
+      note: [
+        `Payment: ${form.paymentMethod}`,
+        `Fulfilment: ${form.fulfilment}`,
+        form.fulfilment === "delivery"
+          ? `Address: ${form.addressLine1}, ${form.addressLine2 || ""} ${form.city}`
+          : "Pickup at Colombo location",
+        form.notes ? `Notes: ${form.notes}` : "",
+      ].filter(Boolean).join(" | "),
+      // you can also pass a custom orderId or date if needed
+      // orderId: `OD-...`,
+      // date: "YYYY-MM-DD",
+    }),
+  });
+
+  if (!res.ok) {
+    const { error } = await res.json().catch(() => ({ error: "Order save failed" }));
+    throw new Error(error || "Order save failed");
+  }
+
+  const data = await res.json();
+  const orderId = data?.order?.orderId || `OD-${Date.now()}`;
+
+  clearCart(); // empty the cart on confirmed order
+  toast.success("Order placed! We’ll be in touch.");
+  router.replace(`/order/confirmation?orderId=${encodeURIComponent(orderId)}`);
+} catch (e: any) {
+  console.error(e);
+  toast.error(e?.message || "Could not place order.");
+} finally {
+  setSubmitting(false);
+}
 
     try {
       setSubmitting(true);
