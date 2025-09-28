@@ -1,10 +1,11 @@
+// models/OnlineOrder.ts
 import { Schema, model, models, Document } from "mongoose";
 
 export interface IOnlineOrder extends Document {
   date: string; // YYYY-MM-DD
   orderId?: string;
-  revenue: number; // total collected
-  cost: number; // kitchen/packaging cost (COGS proxy)
+  revenue: number;
+  cost: number;
   note?: string;
   createdAt: Date;
   updatedAt: Date;
