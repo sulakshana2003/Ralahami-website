@@ -39,3 +39,11 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# Ignore all files in public/videos
+/public/videos/*
+
+# Dependency files
+package.json
+package-lock.json
+
