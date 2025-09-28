@@ -236,7 +236,7 @@ export default function UsersPage() {
     await mutate();
   }
 
-  // ---------- Generate Report (downloads a branded HTML file) ----------
+  // ---------- Generate Report as PDF (manual print/save) ----------
   async function generateReport() {
     // fetch ALL users matching current search/filters (ignores pagination)
     const params = new URLSearchParams({ q, page: "1", limit: "100000" });
@@ -261,7 +261,7 @@ export default function UsersPage() {
     const totalActive = allItems.filter((u) => u.isActive).length;
     const totalBlocked = totalUsers - totalActive;
 
-    // build HTML report
+    // build print-friendly HTML (no auto print)
     const now = new Date();
     const title = "User Report";
     const subtitle = now.toLocaleString();
@@ -286,19 +286,23 @@ export default function UsersPage() {
 <meta charset="utf-8"/>
 <title>${title}</title>
 <style>
-  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; color: #111827; margin: 24px; }
-  .header { display:flex; align-items:center; gap:16px; }
-  .logo { height:48px; width:auto; }
-  .title { font-size: 22px; font-weight: 700; margin: 0; }
-  .subtitle { color:#6B7280; margin-top:4px; }
-  .cards { display:grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap:12px; margin:20px 0; }
-  .card { border:1px solid #E5E7EB; border-radius:12px; padding:12px; }
-  .card .label { font-size:12px; color:#6B7280; }
-  .card .value { font-size:22px; font-weight:700; margin-top:4px; }
-  table { width:100%; border-collapse: collapse; margin-top: 10px; }
-  th, td { border:1px solid #E5E7EB; padding:8px 10px; font-size: 12px; }
-  thead th { background:#F9FAFB; text-align:left; color:#374151; }
+  @page { size: A4; margin: 18mm; }
+  * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; color:#111827; }
+  .header { display:flex; align-items:center; gap:14px; margin-bottom:14px; }
+  .logo { height:42px; width:auto; }
+  .title { font-size:20px; font-weight:700; margin:0; }
+  .subtitle { color:#6B7280; margin-top:2px; font-size:12px; }
+  .cards { display:grid; grid-template-columns: repeat(4, 1fr); gap:8px; margin:12px 0 16px; page-break-inside: avoid; }
+  .card { border:1px solid #E5E7EB; border-radius:10px; padding:10px; }
+  .card .label { font-size:11px; color:#6B7280; }
+  .card .value { font-size:18px; font-weight:700; margin-top:2px; }
+  table { width:100%; border-collapse: collapse; }
+  th, td { border:1px solid #E5E7EB; padding:6px 8px; font-size:11px; }
+  thead th { background:#F3F4F6; text-align:left; color:#374151; }
+  tr { page-break-inside: avoid; }
   tfoot td { background:#F9FAFB; font-weight:600; }
+  @media print { .noprint { display: none !important; } }
 </style>
 </head>
 <body>
@@ -320,38 +324,35 @@ export default function UsersPage() {
   <table>
     <thead>
       <tr>
-        <th style="width:180px">Name</th>
-        <th style="width:220px">Email</th>
-        <th style="width:90px">Role</th>
-        <th style="width:90px">Status</th>
-        <th style="width:140px">Phone</th>
+        <th style="width:160px">Name</th>
+        <th style="width:200px">Email</th>
+        <th style="width:80px">Role</th>
+        <th style="width:80px">Status</th>
+        <th style="width:120px">Phone</th>
         <th>Address</th>
-        <th style="width:170px">Created</th>
+        <th style="width:150px">Created</th>
       </tr>
     </thead>
     <tbody>${rowsHtml}</tbody>
     <tfoot>
-      <tr>
-        <td colspan="7">Generated on ${subtitle}</td>
-      </tr>
+      <tr><td colspan="7">Generated on ${subtitle}</td></tr>
     </tfoot>
   </table>
+
+  <div class="noprint" style="margin-top:16px;text-align:right;">
+    <button onclick="window.print()" style="padding:8px 12px;border:1px solid #e5e7eb;border-radius:8px;background:#111827;color:#fff;">Print / Save as PDF</button>
+  </div>
 </body>
 </html>`;
 
-    // download as HTML file
-    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
-    const urlObj = URL.createObjectURL(blob);
-    const a = document.createElement("a");
-    const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
-      now.getDate()
-    ).padStart(2, "0")}_${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}`;
-    a.href = urlObj;
-    a.download = `user-report_${stamp}.html`;
-    document.body.appendChild(a);
-    a.click();
-    a.remove();
-    URL.revokeObjectURL(urlObj);
+    const w = window.open("", "_blank");
+    if (!w) {
+      alert("Please allow popups to open the report.");
+      return;
+    }
+    w.document.open();
+    w.document.write(html);
+    w.document.close();
   }
 
   return (
@@ -395,45 +396,44 @@ export default function UsersPage() {
       </div>
 
       {/* Filters */}
-<div className="mb-4 flex flex-wrap gap-3">
-  <Input
-    placeholder="Search by name or email..."
-    value={q}
-    onChange={(e) => {
-      setQ(e.target.value);
-      setPage(1);
-    }}
-  />
+      <div className="mb-4 flex flex-wrap gap-3">
+        <Input
+          placeholder="Search by name or email..."
+          value={q}
+          onChange={(e) => {
+            setQ(e.target.value);
+            setPage(1);
+          }}
+        />
 
-  {/* Role filter — compact */}
-  <div className="w-28">
-    <Select
-      value={roleFilter}
-      onChange={(e) => { setRoleFilter(e.target.value as Role | ""); setPage(1); }}
-      className="h-9 px-2 w-full"
-    >
-      <option value="">All Roles</option>
-      <option value="user">User</option>
-      <option value="admin">Admin</option>
-    </Select>
-  </div>
+        {/* Role filter — compact */}
+        <div className="w-28">
+          <Select
+            value={roleFilter}
+            onChange={(e) => { setRoleFilter(e.target.value as Role | ""); setPage(1); }}
+            className="h-9 px-2 w-full"
+          >
+            <option value="">All Roles</option>
+            <option value="user">User</option>
+            <option value="admin">Admin</option>
+          </Select>
+        </div>
 
-  {/* Status filter — compact */}
-  <div className="w-28">
-    <Select
-      value={statusFilter}
-      onChange={(e) => { setStatusFilter(e.target.value as "" | "active" | "blocked"); setPage(1); }}
-      className="h-9 px-2 w-full"
-    >
-      <option value="">All Status</option>
-      <option value="active">Active</option>
-      <option value="blocked">Blocked</option>
-    </Select>
-  </div>
+        {/* Status filter — compact */}
+        <div className="w-28">
+          <Select
+            value={statusFilter}
+            onChange={(e) => { setStatusFilter(e.target.value as "" | "active" | "blocked"); setPage(1); }}
+            className="h-9 px-2 w-full"
+          >
+            <option value="">All Status</option>
+            <option value="active">Active</option>
+            <option value="blocked">Blocked</option>
+          </Select>
+        </div>
 
-  <Button tone="ghost" onClick={() => mutate()}>Refresh</Button>
-</div>
-
+        <Button tone="ghost" onClick={() => mutate()}>Refresh</Button>
+      </div>
 
       {/* Table */}
       <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
@@ -456,10 +456,7 @@ export default function UsersPage() {
               <tr><td colSpan={5} className="p-6 text-center text-neutral-500">No users found</td></tr>
             ) : (
               visibleItems.map((u) => (
-                <tr
-                  key={u._id}
-                  className="border-t hover:bg-neutral-50"
-                >
+                <tr key={u._id} className="border-t hover:bg-neutral-50">
                   {/* Only the name opens the details modal */}
                   <td className="px-4 py-3">
                     <button
