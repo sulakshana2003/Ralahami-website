@@ -14,7 +14,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   await dbConnect();
   const products = await Product.find();
 
-  // === Setup PDF ===
+  // === Setup PDF  gdgdgdg===
   const doc = new jsPDF({ orientation: "portrait", unit: "pt", format: "a4" });
 
   // === Add Logo ===

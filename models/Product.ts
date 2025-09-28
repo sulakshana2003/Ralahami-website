@@ -1,4 +1,4 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
+/* eslint-disable @typescript-eslint/no-explicit-any ggd */
 import { Schema, model, models, Document } from 'mongoose'
 
 export interface IProduct extends Document {
