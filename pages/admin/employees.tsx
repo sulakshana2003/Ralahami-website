@@ -460,7 +460,7 @@ export default function EmployeeAdminPage() {
           <Button tone="ghost" onClick={generateReport}>Generate Report</Button>
           {/* <Button tone="ghost" onClick={seed}>Seed Dummy DB</Button> */}
         </div>
-      </div>
+      
 
         {/* Filters */}
         <div className="bg-white rounded-xl shadow p-4 mb-8 flex flex-wrap gap-3 items-center">
