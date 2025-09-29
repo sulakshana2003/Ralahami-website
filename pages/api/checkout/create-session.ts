@@ -1,56 +1,46 @@
-import type { NextApiRequest, NextApiResponse } from "next";
+// /pages/api/checkout/create-session.ts
 
-/**
- * Professional stub for a payment session creator (e.g., Stripe Checkout).
- * - Validate incoming data
- * - If STRIPE_SECRET_KEY is set, you can wire it to Stripe
- * - Else, respond with a helpful error (the UI will show a toast)
- */
+import { NextApiRequest, NextApiResponse } from 'next';
+import Stripe from 'stripe';
+
+const stripe = new Stripe('sk_test_51RwhjCE4mghBcU8DNAMDKSVpZa3w6bx28dBatkFyPFYL5MkWMeIh6aquat3dsyBdB709CGHVjvyHXqwFI7Clsk0h00Pp8rgJm9', { apiVersion: '2020-08-27' as any });
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+  if (req.method === 'POST') {
+    const { items, charges, customer, fulfilment, payment } = req.body;
 
-  try {
-    const order = req.body as any;
+    // Map items to Stripe line items
+    const lineItems = items.map((item: any) => ({
+      price_data: {
+        currency: 'lkr',
+        product_data: {
+          name: item.name,
+          images: [item.image],
+        },
+        unit_amount: item.unitPrice * 100, // Stripe expects amounts in cents
+      },
+      quantity: item.qty,
+    }));
 
-    // Minimal validation
-    if (!order || !Array.isArray(order.items) || !order.items.length) {
-      return res.status(400).json({ error: "Invalid order payload." });
-    }
-
-    const hasStripe = !!process.env.STRIPE_SECRET_KEY;
-    if (!hasStripe) {
-      // In production, integrate Stripe (or your PSP) here.
-      // For now, tell the UI there’s no gateway configured.
-      return res.status(400).json({
-        error: "Online payments are not configured. Please choose Cash/Card on Delivery.",
+    try {
+      // Create a checkout session
+      const session = await stripe.checkout.sessions.create({
+        payment_method_types: ['card'],
+        line_items: lineItems,
+        mode: 'payment',
+        success_url: `${process.env.HOST_URL}/success`, // Shorten the URL
+        cancel_url: `${process.env.HOST_URL}/cancel`,  // Shorten the URL
       });
+
+      // Return the session URL to redirect to Stripe's checkout page
+      res.status(200).json({ url: session.url });
+    } catch (error: unknown) {
+      if (error instanceof Error) {
+        res.status(500).json({ error: error.message });
+      } else {
+        // In case the error doesn't have a message, provide a fallback
+        res.status(500).json({ error: 'An unknown error occurred.' });
+      }
     }
-
-    // Example Stripe flow (uncomment & add `npm i stripe`):
-    // import Stripe from "stripe";
-    // const stripe = new Stripe(process.env.STRIPE_SECRET_KEY!, { apiVersion: "2022-11-15" });
-    // const session = await stripe.checkout.sessions.create({
-    //   mode: "payment",
-    //   success_url: `${process.env.NEXT_PUBLIC_BASE_URL}/order/confirmation?session_id={CHECKOUT_SESSION_ID}`,
-    //   cancel_url: `${process.env.NEXT_PUBLIC_BASE_URL}/checkout`,
-    //   line_items: order.items.map((it: any) => ({
-    //     quantity: it.qty,
-    //     price_data: {
-    //       currency: "lkr",
-    //       product_data: { name: it.name },
-    //       unit_amount: Math.round(Number(it.unitPrice) * 100), // cents
-    //     },
-    //   })),
-    //   metadata: {
-    //     // you can pass order JSON here (small)
-    //   },
-    // });
-    // return res.status(200).json({ url: session.url });
-
-    return res.status(500).json({ error: "Payment gateway is not implemented yet." });
-  } catch (err: any) {
-    console.error("create-session error", err);
-    return res.status(500).json({ error: "Failed to create payment session." });
   }
 }
