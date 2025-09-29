@@ -177,6 +177,13 @@ export default function LoginPage() {
                     />
                   </div>
 
+                  {/* Forgot Password */}
+                  <div className="text-center text-sm text-stone-600">
+                    <Link href="/reset-password" className="font-semibold text-amber-700 hover:text-amber-800">
+                      Forgot Password?
+                    </Link>
+                  </div>
+
                   {/* Error */}
                   {error && (
                     <p className="rounded-lg border border-stone-200 bg-stone-50 px-3 py-2 text-sm text-stone-900">
