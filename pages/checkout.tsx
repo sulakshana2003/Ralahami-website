@@ -1,12 +1,16 @@
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
 import Image from "next/image";
-import Link from "next/link";
 import toast from "react-hot-toast";
 import { useCart } from "@/hooks/useCart";
+import { Elements, useStripe, useElements, CardElement } from "@stripe/react-stripe-js";
+import { loadStripe } from "@stripe/stripe-js";
+import Link from "next/link";  // Add this import
+
+const stripePromise = loadStripe("pk_test_51RwhjCE4mghBcU8D97gjwODEwddai88lzSnTOo1E9mvIn9wDRbtDv4nPS9rF2nhAJK0ZZ5pZcHmokKr1dtiBjZXO00huVbMGyD"); // Use your Stripe public key here
 
 const FREE_DELIVERY_THRESHOLD = 5000; // LKR
-const DELIVERY_FEE = 350;             // LKR (if below threshold)
+const DELIVERY_FEE = 350; // LKR (if below threshold)
 
 type FormState = {
   fulfilment: "delivery" | "pickup";
@@ -35,16 +39,14 @@ function useHasHydrated() {
   return hydrated;
 }
 
-export default function CheckoutPage() {
+const CheckoutPageContent = () => {
   const router = useRouter();
   const hydrated = useHasHydrated();
 
-  // ✅ Always call Zustand hooks unconditionally
   const items = useCart((s) => s.items);
   const subtotal = useCart((s) => s.subtotal());
   const clearCart = useCart((s) => s.clear);
 
-  // Redirect to cart if empty (after hydration)
   useEffect(() => {
     if (hydrated && (!items || items.length === 0)) {
       router.replace("/cart");
@@ -154,7 +156,6 @@ export default function CheckoutPage() {
       setSubmitting(true);
 
       if (form.paymentMethod === "online") {
-        // Create a remote checkout session (Stripe, etc.)
         const res = await fetch("/api/checkout/create-session", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -171,9 +172,8 @@ export default function CheckoutPage() {
         const data = await res.json();
         if (data?.url) {
           toast.success("Redirecting to secure payment…");
-          // Optionally: save a draft order id here or keep cart until payment success webhook.
           window.location.href = data.url;
-          return; // stop here; browser navigates away
+          return;
         }
 
         toast.error("Payment session created but no redirect URL returned.");
@@ -181,9 +181,6 @@ export default function CheckoutPage() {
         return;
       }
 
-      // Offline payments (COD or Card on Delivery):
-      // In a real app, POST to /api/orders to create the order and return an orderId.
-      // For now, just simulate success and clear cart client-side.
       const fakeOrderId = `OD-${Date.now()}`;
       clearCart();
       toast.success("Order placed! We’ll be in touch.");
@@ -195,7 +192,6 @@ export default function CheckoutPage() {
     }
   };
 
-  // Skeleton while hydrating or if cart empty redirecting
   if (!hydrated || !items || items.length === 0) {
     return (
       <div className="pt-28 pb-20">
@@ -509,5 +505,12 @@ export default function CheckoutPage() {
         </div>
       </div>
     </div>
+  );
+}
+export default function CheckoutPage() {
+  return (
+    <Elements stripe={stripePromise}>
+      <CheckoutPageContent />
+    </Elements>
   );
 }
