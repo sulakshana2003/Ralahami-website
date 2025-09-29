@@ -133,10 +133,17 @@ export default function InventoryAdminPage() {
     [list]
   );
 
+  const [selectedItem, setSelectedItem] = useState<Item | null>(null);
+  const [unitCost, setUnitCost] = useState<number | null>(null);
   // --- actions ---
   async function addItem(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const fd = new FormData(e.currentTarget);
+  e.preventDefault();
+
+  // Get the form element
+  const form = e.currentTarget;
+
+  if (form) {
+    const fd = new FormData(form);
     const body = {
       name: fd.get("name")?.toString().trim(),
       unit: fd.get("unit")?.toString(),
@@ -144,16 +151,23 @@ export default function InventoryAdminPage() {
       unitCost: +fd.get("unitCost")!,
       stockQty: +fd.get("stockQty")!,
       reorderLevel: +fd.get("reorderLevel")!,
+
     };
+
     const r = await fetch("/api/inventory/items", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
+
     if (!r.ok) return alert(await r.text());
-    e.currentTarget.reset();
+
+    // Reset form only if it exists
+    form.reset();
     mutateItems();
   }
+}
+
   async function deleteItem(id: string) {
     if (!confirm("Delete this item?")) return;
     const r = await fetch(`/api/inventory/items?id=${id}`, {
@@ -163,26 +177,59 @@ export default function InventoryAdminPage() {
     mutateItems();
   }
   async function addMovement(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const fd = new FormData(e.currentTarget);
+  e.preventDefault();
+
+  const form = e.currentTarget;
+  if (form) {
+    const fd = new FormData(form);
     const body: any = {
       date: fd.get("date")?.toString(),
       itemId: fd.get("mItem")?.toString(),
       type: fd.get("type")?.toString(),
       qty: Number(fd.get("qty")),
-      unitCost: fd.get("unitCost") ? Number(fd.get("unitCost")) : undefined,
+      unitCost: unitCost,
       note: fd.get("note")?.toString() || "",
     };
+
     const r = await fetch("/api/inventory/movements", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
+
     if (!r.ok) return alert(await r.text());
-    e.currentTarget.reset();
-    mutateMoves();
-    mutateItems();
+
+    // Reset the form after submission
+    form.reset();
   }
+  mutateMoves();
+  mutateItems();
+}
+
+// Function to update the stock level
+async function updateStockLevel(itemId: string, qty: number, type: "purchase" | "consume") {
+  const item = list.find((i) => i._id === itemId);
+  if (!item) return;
+
+  let updatedStock = item.stockQty;
+
+  if (type === "purchase") {
+    updatedStock += qty;  // Increase stock for purchase
+  } else if (type === "consume") {
+    updatedStock -= qty;  // Decrease stock for consumption
+  }
+
+  // Update the item in the inventory database
+  const r = await fetch(`/api/inventory/items/${itemId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ stockQty: updatedStock }),
+  });
+
+  if (!r.ok) return alert(await r.text());
+  mutateItems();  // Refresh the inventory list
+}
+
 
   // ===== Report helpers & action (NEW) =====
   function safe(s: any) {
@@ -337,6 +384,12 @@ export default function InventoryAdminPage() {
     URL.revokeObjectURL(url);
   }
   // ===== end report code =====
+  const categories = [
+  "Fruits", "Vegetables", "Dairy", "Beverages", "Snacks",
+  "Bakery", "Canned Goods", "Frozen Foods", "Spices", "Condiments",
+  "Meat", "Poultry", "Seafood", "Grains", "Legumes",
+  "Oils & Vinegars", "Sauces & Dressings", "Nuts & Seeds", "Cheese", "Eggs"
+];
 
   return (
     <AdminGuard>
@@ -369,6 +422,7 @@ export default function InventoryAdminPage() {
       </div>
 
       {/* Add Item */}
+      
       <section className="mb-8">
         <div className="mb-3 text-lg font-semibold">Add Raw Material</div>
         <form
@@ -405,11 +459,14 @@ export default function InventoryAdminPage() {
             type="number"
             required
           />
-          <Input
-            name="category"
-            placeholder="Category (optional)"
-            className="sm:col-span-2"
-          />
+          <Select name="category" required>
+      <option value="">Select Category</option>
+      {categories.map((category, index) => (
+        <option key={index} value={category}>
+          {category}
+        </option>
+      ))}
+    </Select>
           <Button className="sm:col-span-1">Add</Button>
         </form>
       </section>
@@ -497,24 +554,35 @@ export default function InventoryAdminPage() {
           className="grid gap-3 sm:grid-cols-6 bg-white shadow rounded-xl p-4"
         >
           <Input type="date" name="date" defaultValue={today()} />
-          <Select name="mItem" className="sm:col-span-2">
-            <option value="">Select Item</option>
-            {list.map((i) => (
-              <option key={i._id} value={i._id}>
-                {i.name}
-              </option>
-            ))}
-          </Select>
+          <Select
+  name="mItem"
+  className="sm:col-span-2"
+  value={selectedItem?._id || ""}
+  onChange={(e) => {
+    const item = list.find((i) => i._id === e.target.value);
+    setSelectedItem(item || null);
+    setUnitCost(item ? item.unitCost : null);  // Update unit cost dynamically when an item is selected
+  }}
+>
+  <option value="">Select Item</option>
+  {list.map((i) => (
+    <option key={i._id} value={i._id}>
+      {i.name}
+    </option>
+  ))}
+</Select>
           <Select name="type">
             <option value="purchase">Purchase</option>
             <option value="consume">Consume</option>
           </Select>
           <Input name="qty" placeholder="Qty" type="number" required />
           <Input
-            name="unitCost"
-            placeholder="Unit Cost (if purchase)"
-            type="number"
-          />
+              name="unitCost"
+              placeholder="Unit Cost (if purchase)"
+              type="number"
+              value={unitCost || ""}
+              onChange={(e) => setUnitCost(Number(e.target.value))}
+            />
           <Input
             name="note"
             placeholder="Note (optional)"
