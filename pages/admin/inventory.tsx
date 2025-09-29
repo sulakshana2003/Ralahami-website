@@ -331,11 +331,30 @@ async function updateItem(e: React.FormEvent<HTMLFormElement>) {
   const form = e.currentTarget;
   const fd = new FormData(form);
 
+  const itemId = fd.get("mItem")?.toString();
+  const qty = Number(fd.get("qty"));
+  
+  // Find the item based on the selected item ID
+  const selectedItem = list.find((i) => i._id === itemId);
+
+  // Add check to prevent issues when selectedItem is undefined
+  if (selectedItem) {
+    // Check if the movement type is "consume" and if stock is enough
+    if (fd.get("type") === "consume" && selectedItem.stockQty < qty) {
+      alert(`Not enough stock to consume. Available: ${selectedItem.stockQty} ${selectedItem.unit}`);
+      return; // Stop the action if stock is insufficient
+    }
+  } else {
+    // Handle the case where selectedItem is not found
+    alert("Item not found.");
+    return;
+  }
+
   const body: any = {
     date: fd.get("date")?.toString(),
-    itemId: fd.get("mItem")?.toString(),
+    itemId,
     type: fd.get("type")?.toString(),
-    qty: Number(fd.get("qty")),
+    qty,
     unitCost: unitCost, // Use the selected unit cost
     note: fd.get("note")?.toString() || "",
   };
@@ -350,30 +369,27 @@ async function updateItem(e: React.FormEvent<HTMLFormElement>) {
   if (!r.ok) return alert(await r.text());
 
   // Step 2: Update the stock quantity in the Inventory
-  const item = list.find((i) => i._id === body.itemId);
-  if (item) {
-    let updatedStock = item.stockQty;
-    if (body.type === "purchase") {
-      updatedStock += body.qty;  // Increase stock for purchase
-    } else if (body.type === "consume") {
-      updatedStock -= body.qty;  // Decrease stock for consumption
-    }
+  const updatedStock =
+    fd.get("type") === "purchase"
+      ? selectedItem.stockQty + qty
+      : selectedItem.stockQty - qty;
 
-    // Update the stock in the InventoryItem collection
-    const stockUpdateResponse = await fetch(`/api/inventory/items/${body.itemId}`, {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ stockQty: updatedStock }),
-    });
+  // Update the stock in the InventoryItem collection
+  const stockUpdateResponse = await fetch(`/api/inventory/items/${itemId}`, {
+    method: "PUT",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ stockQty: updatedStock }),
+  });
 
-    if (!stockUpdateResponse.ok) return alert(await stockUpdateResponse.text());
-  }
+  if (!stockUpdateResponse.ok) return alert(await stockUpdateResponse.text());
 
   // Reset form after success
   form.reset();
   mutateMoves();  // Refresh movements
   mutateItems();  // Refresh inventory items
 }
+
+
 
 
 async function deleteMovement(movementId: string, itemId: string, qty: number, type: "purchase" | "consume") {
