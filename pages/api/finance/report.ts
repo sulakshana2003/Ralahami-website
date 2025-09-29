@@ -1,109 +1,238 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
-import type { NextApiRequest, NextApiResponse } from "next";
-import { dbConnect } from "@/lib/db";
-import Reservation from "@/models/Reservation";
-import Payroll from "@/models/Payroll";
-import InventoryItem from "@/models/InventoryItem";
-import InventoryMovement from "@/models/InventoryMovement";
-import OnlineOrder from "@/models/OnlineOrder";
+import { NextApiRequest, NextApiResponse } from "next";
+import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
+import { ChartJSNodeCanvas } from "chartjs-node-canvas";
+import path from "path";
+import fs from "fs";
 
-function* days(from: string, to: string) {
-  const s = new Date(from + "T00:00:00");
-  const e = new Date(to + "T00:00:00");
-  for (let d = new Date(s); d <= e; d.setDate(d.getDate() + 1)) {
-    const mm = String(d.getMonth() + 1).padStart(2, "0");
-    const dd = String(d.getDate()).padStart(2, "0");
-    yield `${d.getFullYear()}-${mm}-${dd}`;
-  }
-}
-function csvEscape(x: any) {
-  const s = String(x ?? "");
-  return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-}
+// Import your DB connection + models
+import { dbConnect } from "@/lib/db";
+import OnlineOrder from "@/models/OnlineOrder";
+import Reservation from "@/models/Reservation";
+import InventoryItem from "@/models/InventoryItem";
+import InventoryMove from "@/models/InventoryMovement";
+import Employee from "@/models/Employee";
+import Payroll from "@/models/Payroll";
+import Product from "@/models/Product";
+
+export const config = { runtime: "nodejs" };
+
+const chartJSNodeCanvas = new ChartJSNodeCanvas({ width: 600, height: 400 });
 
 export default async function handler(
   req: NextApiRequest,
   res: NextApiResponse
 ) {
-  await dbConnect();
-  const { from, to } = req.query as { from?: string; to?: string };
-  if (!from || !to)
-    return res.status(400).json({ message: "from & to are required" });
+  try {
+    const { from, to } = req.query as { from: string; to: string };
+    await dbConnect();
 
-  // preload
-  const orders = await OnlineOrder.find({
-    date: { $gte: from, $lte: to },
-  }).lean();
-  const reservations = await Reservation.find({
-    date: { $gte: from, $lte: to },
-    paymentStatus: "paid",
-  }).lean();
-  const payroll = await Payroll.find({ date: { $gte: from, $lte: to } }).lean();
-  const moves = await InventoryMovement.find({
-    date: { $gte: from, $lte: to },
-  }).lean();
-  const items = await InventoryItem.find().select("_id unitCost").lean();
-  const costByItem = new Map(
-    items.map((i: any) => [String(i._id), i.unitCost || 0])
-  );
+    // 🔹 Fetch data from DB
+    const orders = await OnlineOrder.find({
+      date: { $gte: from, $lte: to },
+    }).lean();
+    const reservations = await Reservation.find({
+      date: { $gte: from, $lte: to },
+    }).lean();
+    const items = await InventoryItem.find().lean();
+    const moves = await InventoryMove.find({
+      date: { $gte: from, $lte: to },
+    }).lean();
+    const employees = await Employee.find().lean();
+    const payroll = await Payroll.find({
+      date: { $gte: from, $lte: to },
+    }).lean();
+    const products = await Product.find().lean();
 
-  const head = [
-    "Date",
-    "Online Revenue",
-    "Online Cost",
-    "Online Profit",
-    "Reservation Revenue",
-    "Payroll Outflow",
-    "Inventory Purchases",
-    "Approx. COGS (Consumes)",
-    "Net Profit (illustrative)",
-  ];
-  const rows = [head];
-
-  for (const d of days(from, to)) {
-    const or = orders.filter((o) => o.date === d);
-    const rr = reservations.filter((r) => r.date === d);
-    const pr = payroll.filter((p) => p.date === d);
-    const mvPurch = moves.filter((m) => m.date === d && m.type === "purchase");
-    const mvCons = moves.filter((m) => m.date === d && m.type === "consume");
-
-    const onlineRev = or.reduce((s, x: any) => s + x.revenue, 0);
-    const onlineCost = or.reduce((s, x: any) => s + x.cost, 0);
-    const onlineProfit = onlineRev - onlineCost;
-
-    const resRev = rr.reduce((s, x: any) => s + (x.amount || 0), 0);
-    const payrollOut = pr.reduce(
-      (s, x: any) => s + (x.type === "deduction" ? -1 : 1) * x.amount,
+    // 🔹 Generate summary stats
+    const onlineRevenue = orders.reduce((sum, o) => sum + o.revenue, 0);
+    const onlineProfit = orders.reduce(
+      (sum, o) => sum + (o.revenue - o.cost),
       0
     );
-    const invPurch = mvPurch.reduce(
-      (s, m: any) => s + (m.unitCost || 0) * m.qty,
+    const reservationRevenue = reservations.reduce(
+      (sum, r) => sum + r.amount,
       0
     );
-    const cogs = mvCons.reduce(
-      (s, m: any) => s + (costByItem.get(String(m.itemId)) || 0) * m.qty,
-      0
-    );
+    const payrollOutflow = payroll.reduce((sum, p) => sum + p.amount, 0);
+    const inventoryPurchases = moves
+      .filter((m) => m.type === "purchase")
+      .reduce((sum, m) => sum + (m.unitCost || 0) * m.qty, 0);
+    const netProfit =
+      onlineProfit + reservationRevenue - payrollOutflow - inventoryPurchases;
 
-    const net = onlineProfit + resRev - payrollOut - invPurch;
-    rows.push([
-      d,
-      onlineRev.toString(),
-      onlineCost.toString(),
-      onlineProfit.toString(),
-      resRev.toString(),
-      payrollOut.toString(),
-      invPurch.toString(),
-      cogs.toString(),
-      net.toString(),
-    ]);
+    // 🔹 Create charts
+    const pieChart = await chartJSNodeCanvas.renderToBuffer({
+      type: "pie",
+      data: {
+        labels: ["Online", "Reservations", "Payroll", "Inventory"],
+        datasets: [
+          {
+            data: [
+              onlineRevenue,
+              reservationRevenue,
+              payrollOutflow,
+              inventoryPurchases,
+            ],
+            backgroundColor: ["#4f46e5", "#10b981", "#f87171", "#fbbf24"],
+          },
+        ],
+      },
+    });
+
+    const barChart = await chartJSNodeCanvas.renderToBuffer({
+      type: "bar",
+      data: {
+        labels: products.slice(0, 5).map((p) => p.name),
+        datasets: [
+          {
+            label: "Stock",
+            data: products.slice(0, 5).map((p) => p.stock),
+            backgroundColor: "#4f46e5",
+          },
+        ],
+      },
+      options: { scales: { y: { beginAtZero: true } } },
+    });
+
+    // 🔹 Generate PDF
+    const pdfDoc = await PDFDocument.create();
+    const page = pdfDoc.addPage([595, 842]); // A4
+    const { height } = page.getSize();
+    const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+
+    // Header
+    page.drawText("Ralahami Hotel", {
+      x: 50,
+      y: height - 60,
+      size: 24,
+      font,
+      color: rgb(0.2, 0.2, 0.7),
+    });
+
+    const logoPath = path.join(process.cwd(), "public/hotel.png");
+    if (fs.existsSync(logoPath)) {
+      const logoBytes = fs.readFileSync(logoPath);
+      const logoImage = await pdfDoc.embedPng(logoBytes);
+      page.drawImage(logoImage, {
+        x: 450,
+        y: height - 100,
+        width: 100,
+        height: 60,
+      });
+    }
+
+    page.drawText(`Report Period: ${from} - ${to}`, {
+      x: 50,
+      y: height - 120,
+      size: 12,
+      font,
+    });
+
+    // Summary
+    page.drawText(`Online Revenue: Rs. ${onlineRevenue}`, {
+      x: 50,
+      y: height - 160,
+      size: 12,
+    });
+    page.drawText(`Online Profit: Rs. ${onlineProfit}`, {
+      x: 50,
+      y: height - 180,
+      size: 12,
+    });
+    page.drawText(`Reservations Revenue: Rs. ${reservationRevenue}`, {
+      x: 50,
+      y: height - 200,
+      size: 12,
+    });
+    page.drawText(`Payroll Outflow: Rs. ${payrollOutflow}`, {
+      x: 50,
+      y: height - 220,
+      size: 12,
+    });
+    page.drawText(`Inventory Purchases: Rs. ${inventoryPurchases}`, {
+      x: 50,
+      y: height - 240,
+      size: 12,
+    });
+    page.drawText(`Net Profit: Rs. ${netProfit}`, {
+      x: 50,
+      y: height - 260,
+      size: 12,
+    });
+
+    // Embed charts
+    const pieImage = await pdfDoc.embedPng(pieChart);
+    page.drawImage(pieImage, {
+      x: 50,
+      y: height - 600,
+      width: 200,
+      height: 200,
+    });
+
+    const barImage = await pdfDoc.embedPng(barChart);
+    page.drawImage(barImage, {
+      x: 300,
+      y: height - 600,
+      width: 200,
+      height: 200,
+    });
+
+    // Add new page for detailed tables
+    const page2 = pdfDoc.addPage([595, 842]);
+    let y = 800;
+
+    function drawRow(text: string, x: number, fontSize = 10) {
+      page2.drawText(text, { x, y, size: fontSize, font });
+    }
+
+    // Orders
+    y -= 20;
+    drawRow("Orders:", 50, 14);
+    y -= 20;
+    orders.slice(0, 20).forEach((o) => {
+      drawRow(
+        `${o.date} | ${o.orderId} | Rev: ${o.revenue} | Cost: ${o.cost}`,
+        50
+      );
+      y -= 14;
+    });
+
+    // Reservations
+    y -= 30;
+    drawRow("Reservations:", 50, 14);
+    y -= 20;
+    reservations.slice(0, 20).forEach((r) => {
+      drawRow(
+        `${r.date} | ${r.name} | Party: ${r.partySize} | Rs.${r.amount}`,
+        50
+      );
+      y -= 14;
+    });
+
+    // Products
+    y -= 30;
+    drawRow("Products:", 50, 14);
+    y -= 20;
+    products.slice(0, 20).forEach((p) => {
+      drawRow(
+        `${p.name} | Rs.${p.price} | Stock: ${p.stock} | ${
+          p.isAvailable ? "Available" : "Unavailable"
+        }`,
+        50
+      );
+      y -= 14;
+    });
+
+    // Save PDF
+    const pdfBytes = await pdfDoc.save();
+    res.setHeader("Content-Type", "application/pdf");
+    res.setHeader(
+      "Content-Disposition",
+      "attachment; filename=finance-report.pdf"
+    );
+    res.send(Buffer.from(pdfBytes));
+  } catch (e) {
+    console.error(e);
+    res.status(500).json({ error: "Failed to generate report" });
   }
-
-  const csv = rows.map((r) => r.map(csvEscape).join(",")).join("\n");
-  res.setHeader("Content-Type", "text/csv; charset=utf-8");
-  res.setHeader(
-    "Content-Disposition",
-    `attachment; filename="finance_${from}_to_${to}.csv"`
-  );
-  res.send(csv);
 }

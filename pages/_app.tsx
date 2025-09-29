@@ -1,18 +1,22 @@
-// pages/_app.tsx
 import type { AppProps } from "next/app";
 import { SessionProvider } from "next-auth/react";
-import { CartProvider } from "@/src/context/CartContext"; // if you added cart
+import CartSessionBridge from "@/src/components/CartSessionBridge";
+import ClientOnly from "@/src/components/ClientOnly";
+import { Toaster } from "react-hot-toast";
 import "@/styles/globals.css";
 
-export default function App({
-  Component,
-  pageProps: { session, ...pageProps },
-}: AppProps & { pageProps: { session?: any } }) {
+export default function App({ Component, pageProps: { session, ...pageProps } }: AppProps & { pageProps: { session?: any } }) {
   return (
     <SessionProvider session={session}>
-      <CartProvider>
-        <Component {...pageProps} />
-      </CartProvider>
+      {/* runs effects only, safe during SSR */}
+      <CartSessionBridge />
+
+      {/* render navbar & toaster only on client to avoid SSR/client drift */}
+      <ClientOnly>
+        <Toaster position="top-right" />
+      </ClientOnly>
+
+      <Component {...pageProps} />
     </SessionProvider>
   );
 }

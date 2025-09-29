@@ -39,6 +39,31 @@ const generateEmployeeId = () => {
   return `EMP${Date.now().toString().slice(-6)}`;
 };
 
+// ----- NEW (helpers for report) -----
+function fmtDateHuman(d: string | number | Date) {
+  try {
+    return new Date(d).toLocaleString();
+  } catch {
+    return String(d ?? "");
+  }
+}
+async function toDataUrl(url: string) {
+  try {
+    const res = await fetch(url, { credentials: "same-origin" });
+    if (!res.ok) throw new Error(String(res.status));
+    const blob = await res.blob();
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(String(reader.result));
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return "";
+  }
+}
+// ----- END NEW -----
+
 // ---------- UI atoms ----------
 function Button({
   children,
@@ -297,79 +322,116 @@ export default function EmployeeAdminPage() {
     }
   }
 
-  // Delete employee function
-  async function deleteEmployee(employeeId: string) {
-    if (!confirm("Are you sure you want to delete this employee?")) return;
-    try {
-      const r = await fetch(`/api/Employee/employees/${employeeId}`, {
-        method: "DELETE",
-      });
-      if (!r.ok) throw new Error(await r.text());
-      mutateEmp();
-      alert("Employee deleted successfully!");
-    } catch (error) {
-      alert(`Error: ${error}`);
-    }
+  // ----- NEW: Generate Report -----
+  async function generateReport() {
+    const emps = (employees || []) as Employee[];
+    const pays = (payroll || []) as Payroll[];
+
+    const logo = await toDataUrl("/images/RalahamiLogo.png");
+
+    const now = new Date();
+    const title = "Employee & Payroll Report";
+    const subtitle = `Range: ${from} → ${to} • Generated ${now.toLocaleString()}`;
+
+    const empRows = emps
+      .map(
+        (e) => `<tr>
+          <td>${e.name}</td>
+          <td>${e.role}</td>
+          <td style="text-align:right">${fmt.format(e.baseSalary)}</td>
+        </tr>`
+      )
+      .join("");
+
+    const payRows = pays
+      .map((p) => {
+        const emp = emps.find((e) => e._id === p.employeeId);
+        const sign = p.type === "deduction" ? "-" : "";
+        return `<tr>
+          <td>${p.date}</td>
+          <td>${emp?.name || p.employeeId}</td>
+          <td>${p.type}</td>
+          <td style="text-align:right">${sign}${fmt.format(p.amount)}</td>
+          <td>${p.note ? p.note.replace(/</g, "&lt;") : "-"}</td>
+        </tr>`;
+      })
+      .join("");
+
+    const html = `<!doctype html>
+<html>
+<head>
+<meta charset="utf-8"/>
+<title>${title}</title>
+<style>
+  body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; color:#111827; margin:24px; }
+  .header { display:flex; align-items:center; gap:16px; }
+  .logo { height:48px; width:auto; }
+  .title { font-size:22px; font-weight:700; margin:0; }
+  .subtitle { color:#6B7280; margin-top:4px; }
+  .cards { display:grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap:12px; margin:20px 0; }
+  .card { border:1px solid #E5E7EB; border-radius:12px; padding:12px; }
+  .label { font-size:12px; color:#6B7280; }
+  .value { font-size:22px; font-weight:700; margin-top:4px; }
+  h2 { font-size:16px; margin:24px 0 8px; }
+  table { width:100%; border-collapse: collapse; }
+  th, td { border:1px solid #E5E7EB; padding:8px 10px; font-size:12px; }
+  thead th { background:#F9FAFB; text-align:left; color:#374151; }
+</style>
+</head>
+<body>
+  <div class="header">
+    ${logo ? `<img class="logo" src="${logo}" alt="Logo" />` : ""}
+    <div>
+      <h1 class="title">${title}</h1>
+      <div class="subtitle">${subtitle}</div>
+    </div>
+  </div>
+
+  <div class="cards">
+    <div class="card"><div class="label">Employees</div><div class="value">${emps.length}</div></div>
+    <div class="card"><div class="label">Total Outflow</div><div class="value">${fmt.format(totals.outflow)}</div></div>
+    <div class="card"><div class="label">Salaries</div><div class="value">${fmt.format(totals.salaries)}</div></div>
+    <div class="card"><div class="label">Advances</div><div class="value">${fmt.format(totals.advances)}</div></div>
+    <div class="card"><div class="label">Bonuses</div><div class="value">${fmt.format(totals.bonuses)}</div></div>
+    <div class="card"><div class="label">Deductions</div><div class="value">${fmt.format(totals.deductions)}</div></div>
+  </div>
+
+  <h2>Employees</h2>
+  <table>
+    <thead><tr><th>Name</th><th>Role</th><th style="text-align:right">Base Salary</th></tr></thead>
+    <tbody>${empRows || `<tr><td colspan="3">No employees</td></tr>`}</tbody>
+  </table>
+
+  <h2 style="margin-top:24px">Payroll (${from} → ${to})</h2>
+  <table>
+    <thead>
+      <tr>
+        <th style="width:120px">Date</th>
+        <th>Employee</th>
+        <th style="width:110px">Type</th>
+        <th style="width:130px; text-align:right">Amount</th>
+        <th>Note</th>
+      </tr>
+    </thead>
+    <tbody>${payRows || `<tr><td colspan="5">No transactions in range</td></tr>`}</tbody>
+  </table>
+</body>
+</html>`;
+
+    const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+    const urlObj = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(
+      now.getDate()
+    ).padStart(2, "0")}_${String(now.getHours()).padStart(2, "0")}${String(now.getMinutes()).padStart(2, "0")}`;
+    a.href = urlObj;
+    a.download = `employee-payroll-report_${stamp}.html`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(urlObj);
   }
-
-  // New function to generate the report as a PDF
-  const generateReport = async () => {
-    try {
-      // Fetch employee and payroll data
-      const responseEmp = await fetch("/api/Employee/employees");
-      const employeesData = await responseEmp.json();
-
-      const responsePayroll = await fetch(`/api/Employee/payroll?from=${from}&to=${to}`);
-      const payrollData = await responsePayroll.json();
-
-      // Calculate total payroll for the report with proper typing
-      const totalSalary = payrollData.filter((p: Payroll) => p.type === "salary").reduce((sum: number, p: Payroll) => sum + p.amount, 0);
-      const totalBonus = payrollData.filter((p: Payroll) => p.type === "bonus").reduce((sum: number, p: Payroll) => sum + p.amount, 0);
-      const totalAdvances = payrollData.filter((p: Payroll) => p.type === "advance").reduce((sum: number, p: Payroll) => sum + p.amount, 0);
-      const totalDeductions = payrollData.filter((p: Payroll) => p.type === "deduction").reduce((sum: number, p: Payroll) => sum + p.amount, 0);
-
-      // Create PDF document
-      const doc = new jsPDF();
-      doc.setFontSize(16);
-      doc.text("Employee Management Summary Report", 20, 20);
-
-      // Add Summary Information
-      doc.setFontSize(12);
-      doc.text(`Report Period: ${from} to ${to}`, 20, 35);
-      doc.text(`Total Employees: ${employeesData.length}`, 20, 45);
-      doc.text(`Total Salary: LKR ${totalSalary.toLocaleString()}`, 20, 55);
-      doc.text(`Total Bonus: LKR ${totalBonus.toLocaleString()}`, 20, 65);
-      doc.text(`Total Advances: LKR ${totalAdvances.toLocaleString()}`, 20, 75);
-      doc.text(`Total Deductions: LKR ${totalDeductions.toLocaleString()}`, 20, 85);
-
-      // Add Employee List to the Report
-      doc.text("Employee List:", 20, 105);
-      employeesData.forEach((emp: Employee, index: number) => {
-        if (index < 15) { // Limit to prevent overflow
-          doc.text(`${index + 1}. ${emp.name} - ${emp.role} - LKR ${emp.baseSalary.toLocaleString()}`, 20, 115 + index * 8);
-        }
-      });
-
-      // Use html2canvas to add payroll data if table exists
-      const payrollTable = document.getElementById("payroll-table");
-      if (payrollTable) {
-        try {
-          const canvas = await html2canvas(payrollTable);
-          const imgData = canvas.toDataURL("image/png");
-          doc.addPage();
-          doc.text("Payroll Details:", 20, 20);
-          doc.addImage(imgData, "PNG", 20, 30, 170, 100);
-        } catch (error) {
-          console.log("Could not capture payroll table:", error);
-        }
-      }
-
-      // Save the generated PDF
-      doc.save(`employee_report_${from}_to_${to}.pdf`);
-    } catch (error) {
-      alert(`Error generating report: ${error}`);
-    }
-  };
+  // ----- END NEW -----
 
   return (
     <AdminGuard>
@@ -393,6 +455,12 @@ export default function EmployeeAdminPage() {
             <Button onClick={generateReport}>Generate Report</Button>
           </div>
         </div>
+        {/* NEW: add Generate Report button next to Seed */}
+        <div className="flex gap-2">
+          <Button tone="ghost" onClick={generateReport}>Generate Report</Button>
+          {/* <Button tone="ghost" onClick={seed}>Seed Dummy DB</Button> */}
+        </div>
+      </div>
 
         {/* Filters */}
         <div className="bg-white rounded-xl shadow p-4 mb-8 flex flex-wrap gap-3 items-center">
