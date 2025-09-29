@@ -178,33 +178,87 @@ export default function InventoryAdminPage() {
   }
   async function addMovement(e: React.FormEvent<HTMLFormElement>) {
   e.preventDefault();
-
   const form = e.currentTarget;
-  if (form) {
-    const fd = new FormData(form);
-    const body: any = {
-      date: fd.get("date")?.toString(),
-      itemId: fd.get("mItem")?.toString(),
-      type: fd.get("type")?.toString(),
-      qty: Number(fd.get("qty")),
-      unitCost: unitCost,
-      note: fd.get("note")?.toString() || "",
-    };
+  const fd = new FormData(form);
 
-    const r = await fetch("/api/inventory/movements", {
-      method: "POST",
+  const body: any = {
+    date: fd.get("date")?.toString(),
+    itemId: fd.get("mItem")?.toString(),
+    type: fd.get("type")?.toString(),
+    qty: Number(fd.get("qty")),
+    unitCost: unitCost, // Use the selected unit cost
+    note: fd.get("note")?.toString() || "",
+  };
+
+  // Step 1: Create the inventory movement
+  const r = await fetch("/api/inventory/movements", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+
+  if (!r.ok) return alert(await r.text());
+
+  // Step 2: Update the stock quantity in the Inventory
+  const item = list.find((i) => i._id === body.itemId);
+  if (item) {
+    let updatedStock = item.stockQty;
+    if (body.type === "purchase") {
+      updatedStock += body.qty;  // Increase stock for purchase
+    } else if (body.type === "consume") {
+      updatedStock -= body.qty;  // Decrease stock for consumption
+    }
+
+    // Update the stock in the InventoryItem collection
+    const stockUpdateResponse = await fetch(`/api/inventory/items/${body.itemId}`, {
+      method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
+      body: JSON.stringify({ stockQty: updatedStock }),
     });
 
-    if (!r.ok) return alert(await r.text());
-
-    // Reset the form after submission
-    form.reset();
+    if (!stockUpdateResponse.ok) return alert(await stockUpdateResponse.text());
   }
-  mutateMoves();
-  mutateItems();
+
+  // Reset form after success
+  form.reset();
+  mutateMoves();  // Refresh movements
+  mutateItems();  // Refresh inventory items
 }
+
+
+async function deleteMovement(movementId: string, itemId: string, qty: number, type: "purchase" | "consume") {
+  // Step 1: Delete the movement from the inventory movements collection
+  const r = await fetch(`/api/inventory/movements/${movementId}`, {
+    method: "DELETE",
+  });
+
+  if (!r.ok) return alert(await r.text());
+
+  // Step 2: Adjust the stock in the inventory based on the movement type
+  const item = list.find((i) => i._id === itemId);
+  if (item) {
+    let updatedStock = item.stockQty;
+    if (type === "purchase") {
+      updatedStock -= qty;  // Decrease stock for deleted purchase
+    } else if (type === "consume") {
+      updatedStock += qty;  // Increase stock for deleted consumption
+    }
+
+    // Update the stock in the InventoryItem collection
+    const stockUpdateResponse = await fetch(`/api/inventory/items/${itemId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ stockQty: updatedStock }),
+    });
+
+    if (!stockUpdateResponse.ok) return alert(await stockUpdateResponse.text());
+  }
+
+  // Refresh data after successful deletion
+  mutateMoves();  // Refresh movements
+  mutateItems();  // Refresh inventory items
+}
+
 
 // Function to update the stock level
 async function updateStockLevel(itemId: string, qty: number, type: "purchase" | "consume") {
@@ -229,8 +283,6 @@ async function updateStockLevel(itemId: string, qty: number, type: "purchase" | 
   if (!r.ok) return alert(await r.text());
   mutateItems();  // Refresh the inventory list
 }
-
-
   // ===== Report helpers & action (NEW) =====
   function safe(s: any) {
     return String(s ?? "").replace(/[&<>"']/g, (c) => ({
@@ -594,60 +646,70 @@ async function updateStockLevel(itemId: string, qty: number, type: "purchase" | 
 
       {/* Movements Table */}
       <section>
-        <div className="mb-3 text-lg font-semibold">
-          Inventory Movements ({from} → {to})
-        </div>
-        <div className="overflow-hidden rounded-xl border bg-white shadow">
-          <table className="w-full text-sm">
-            <thead className="bg-neutral-50">
-              <tr className="text-left text-neutral-600">
-                <th className="px-4 py-2">Date</th>
-                <th>Item</th>
-                <th>Type</th>
-                <th>Qty</th>
-                <th>Unit Cost</th>
-                <th>Total</th>
-                <th>Note</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(moves || []).map((m) => {
-                const item = list.find((i) => i._id === m.itemId);
-                const uc =
-                  m.type === "purchase" ? m.unitCost || 0 : item?.unitCost || 0;
-                return (
-                  <tr key={m._id} className="border-t">
-                    <td className="px-4 py-3">{m.date}</td>
-                    <td>{item?.name || m.itemId}</td>
-                    <td
-                      className={
-                        m.type === "purchase"
-                          ? "text-blue-600"
-                          : "text-amber-700"
-                      }
-                    >
-                      {m.type}
-                    </td>
-                    <td>
-                      {m.qty} {item?.unit}
-                    </td>
-                    <td>{fmt.format(uc)}</td>
-                    <td>{fmt.format(uc * m.qty)}</td>
-                    <td>{m.note || "-"}</td>
-                  </tr>
-                );
-              })}
-              {(moves || []).length === 0 && (
-                <tr>
-                  <td colSpan={7} className="p-6 text-center text-neutral-500">
-                    No movements in range
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+  <div className="mb-3 text-lg font-semibold">
+    Inventory Movements ({from} → {to})
+  </div>
+  <div className="overflow-hidden rounded-xl border bg-white shadow">
+    <table className="w-full text-sm">
+      <thead className="bg-neutral-50">
+        <tr className="text-left text-neutral-600">
+          <th className="px-4 py-2">Date</th>
+          <th>Item</th>
+          <th>Type</th>
+          <th>Qty</th>
+          <th>Unit Cost</th>
+          <th>Total</th>
+          <th>Note</th>
+          <th>Actions</th> {/* Column for delete button */}
+        </tr>
+      </thead>
+      <tbody>
+        {(moves || []).map((m) => {
+          const item = list.find((i) => i._id === m.itemId);
+          const uc =
+            m.type === "purchase" ? m.unitCost || 0 : item?.unitCost || 0;
+          return (
+            <tr key={m._id} className="border-t">
+              <td className="px-4 py-3">{m.date}</td>
+              <td>{item?.name || m.itemId}</td>
+              <td
+                className={
+                  m.type === "purchase" ? "text-blue-600" : "text-amber-700"
+                }
+              >
+                {m.type}
+              </td>
+              <td>
+                {m.qty} {item?.unit}
+              </td>
+              <td>{fmt.format(uc)}</td>
+              <td>{fmt.format(uc * m.qty)}</td>
+              <td>{m.note || "-"}</td>
+              <td className="text-right">
+                <Button
+                  tone="danger"
+                  onClick={() =>
+                    deleteMovement(m._id, m.itemId, m.qty, m.type)
+                  }
+                >
+                  Delete
+                </Button>
+              </td>
+            </tr>
+          );
+        })}
+        {(moves || []).length === 0 && (
+          <tr>
+            <td colSpan={8} className="p-6 text-center text-neutral-500">
+              No movements in range
+            </td>
+          </tr>
+        )}
+      </tbody>
+    </table>
+  </div>
+</section>
+
     </DashboardLayout>
     </AdminGuard>
   );
