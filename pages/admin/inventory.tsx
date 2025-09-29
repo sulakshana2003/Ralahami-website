@@ -6,6 +6,7 @@ import useSWR from "swr";
 import { useMemo, useState } from "react";
 import DashboardLayout from "../components/DashboardLayout";
 import AdminGuard from "../components/AdminGuard"
+import BarChart from "../components/BarChart";
 
 // ---------- utils ----------
 const fetcher = async (url: string) => {
@@ -108,6 +109,111 @@ type Movement = {
   date: string;
 };
 
+
+const categories = [
+  "Fruits", "Vegetables", "Dairy", "Beverages", "Snacks",
+  "Bakery", "Canned Goods", "Frozen Foods", "Spices", "Condiments",
+  "Meat", "Poultry", "Seafood", "Grains", "Legumes",
+  "Oils & Vinegars", "Sauces & Dressings", "Nuts & Seeds", "Cheese", "Eggs"
+];
+
+// Modal component for editing an item
+function EditModal({ isOpen, onClose, item, onSubmit }: any) {
+  if (!isOpen) return null;
+
+  return (
+    <div className="fixed inset-0 bg-transparent flex items-center justify-center z-50">
+      <div className="bg-white p-6 rounded-xl shadow-lg max-w-lg w-full">
+        <h2 className="text-xl font-semibold mb-4">Edit Raw Material</h2>
+        <form onSubmit={onSubmit} className="space-y-4">
+          {/* Name field */}
+          <div>
+            <label htmlFor="name" className="block text-sm font-medium text-gray-700">Name (e.g., Rice)</label>
+            <Input
+              id="name"
+              name="name"
+              placeholder="Name (e.g., Rice)"
+              defaultValue={item?.name}  // Pre-fill with current item name
+              required
+            />
+          </div>
+
+          {/* Unit field */}
+          <div>
+            <label htmlFor="unit" className="block text-sm font-medium text-gray-700">Unit</label>
+            <Select name="unit" id="unit" defaultValue={item?.unit}>
+              <option value="kg">kg</option>
+              <option value="g">g</option>
+              <option value="L">L</option>
+              <option value="pcs">pcs</option>
+            </Select>
+          </div>
+
+          {/* Unit Cost field */}
+          <div>
+            <label htmlFor="unitCost" className="block text-sm font-medium text-gray-700">Unit Cost (LKR)</label>
+            <Input
+              id="unitCost"
+              name="unitCost"
+              placeholder="Unit Cost (LKR)"
+              type="number"
+              defaultValue={item?.unitCost}  // Pre-fill with current unit cost
+              required
+            />
+          </div>
+
+          {/* Stock Qty field */}
+          <div>
+            <label htmlFor="stockQty" className="block text-sm font-medium text-gray-700">Initial Stock Qty</label>
+            <Input
+              id="stockQty"
+              name="stockQty"
+              placeholder="Initial Stock Qty"
+              type="number"
+              defaultValue={item?.stockQty}  // Pre-fill with current stock quantity
+              required
+            />
+          </div>
+
+          {/* Reorder Level field */}
+          <div>
+            <label htmlFor="reorderLevel" className="block text-sm font-medium text-gray-700">Reorder Level</label>
+            <Input
+              id="reorderLevel"
+              name="reorderLevel"
+              placeholder="Reorder Level"
+              type="number"
+              defaultValue={item?.reorderLevel}  // Pre-fill with current reorder level
+              required
+            />
+          </div>
+
+          {/* Category field */}
+          <div>
+            <label htmlFor="category" className="block text-sm font-medium text-gray-700">Category</label>
+            <Select name="category" id="category" defaultValue={item?.category}>
+              <option value="">Select Category</option>
+              {categories.map((category, index) => (
+                <option key={index} value={category}>
+                  {category}
+                </option>
+              ))}
+            </Select>
+          </div>
+
+          <div className="flex justify-between mt-4">
+            <Button type="button" tone="ghost" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit">Update</Button>
+          </div>
+        </form>
+      </div>
+    </div>
+  );
+}
+
+
 // ---------- main ----------
 export default function InventoryAdminPage() {
   
@@ -167,6 +273,50 @@ export default function InventoryAdminPage() {
     mutateItems();
   }
 }
+const [editingItem, setEditingItem] = useState<Item | null>(null);
+  const [isModalOpen, setModalOpen] = useState(false);
+
+  // Open the edit form in the modal
+  function openEditForm(item: Item) {
+    setEditingItem(item);
+    setModalOpen(true);
+  }
+
+  // Close the modal
+  function closeModal() {
+    setModalOpen(false);
+    setEditingItem(null);
+  }
+
+async function updateItem(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    if (!editingItem) return;
+
+    const form = e.currentTarget;
+    const fd = new FormData(form);
+
+    const body = {
+      name: fd.get("name")?.toString().trim(),
+      unit: fd.get("unit")?.toString(),
+      category: fd.get("category")?.toString(),
+      unitCost: +fd.get("unitCost")!,
+      stockQty: +fd.get("stockQty")!,
+      reorderLevel: +fd.get("reorderLevel")!,
+    };
+
+    const r = await fetch(`/api/inventory/items/${editingItem._id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    if (!r.ok) return alert(await r.text());
+
+    form.reset();
+    closeModal(); // Close the modal
+    mutateItems(); // Refresh the items list
+  }
+
 
   async function deleteItem(id: string) {
     if (!confirm("Delete this item?")) return;
@@ -436,12 +586,49 @@ async function updateStockLevel(itemId: string, qty: number, type: "purchase" | 
     URL.revokeObjectURL(url);
   }
   // ===== end report code =====
-  const categories = [
+  /* const categories = [
   "Fruits", "Vegetables", "Dairy", "Beverages", "Snacks",
   "Bakery", "Canned Goods", "Frozen Foods", "Spices", "Condiments",
   "Meat", "Poultry", "Seafood", "Grains", "Legumes",
   "Oils & Vinegars", "Sauces & Dressings", "Nuts & Seeds", "Cheese", "Eggs"
-];
+]; */
+
+// Filters for Inventory Snapshot
+const [itemFilter, setItemFilter] = useState<string>("");
+const [categoryFilter, setCategoryFilter] = useState<string>("");
+
+const filteredItems = useMemo(() => {
+  return list.filter((item) => {
+    const isItemMatch = itemFilter ? item.name.toLowerCase().includes(itemFilter.toLowerCase()) : true;
+    const isCategoryMatch = categoryFilter ? item.category?.toLowerCase() === categoryFilter.toLowerCase() : true;
+    return isItemMatch && isCategoryMatch;
+  });
+}, [itemFilter, categoryFilter, list]);
+
+
+// Filters for Inventory Movements
+const [movementFrom, setMovementFrom] = useState<string>(today());
+const [movementTo, setMovementTo] = useState<string>(today());
+const [movementItemFilter, setMovementItemFilter] = useState<string>("");
+const [movementTypeFilter, setMovementTypeFilter] = useState<string>("");
+
+const filteredMovements = useMemo(() => {
+  return (moves || []).filter((movement) => {
+    const item = list.find((i) => i._id === movement.itemId);
+    const isItemMatch = movementItemFilter ? (item?.name || "").toLowerCase().includes(movementItemFilter.toLowerCase()) : true;
+    const isTypeMatch = movementTypeFilter ? movement.type === movementTypeFilter : true;
+    const isDateMatch =
+      new Date(movement.date) >= new Date(movementFrom) && new Date(movement.date) <= new Date(movementTo);
+    return isItemMatch && isTypeMatch && isDateMatch;
+  });
+}, [movementFrom, movementTo, movementItemFilter, movementTypeFilter, moves, list]);
+
+const chartData = {
+  labels: (items || []).map((item: any) => item.name), // Item names
+  values: (items || []).map((item: any) => item.stockQty), // Stock quantities
+  units: (items || []).map((item: any) => item.unit),
+};
+
 
   return (
     <AdminGuard>
@@ -525,49 +712,79 @@ async function updateStockLevel(itemId: string, qty: number, type: "purchase" | 
 
       {/* Items Table */}
       <section className="mb-8">
-        <div className="mb-3 text-lg font-semibold">Inventory Snapshot</div>
-        <div className="overflow-hidden rounded-xl border bg-white shadow">
-          <table className="w-full text-sm">
-            <thead className="bg-neutral-50">
-              <tr className="text-left text-neutral-600">
-                <th className="px-4 py-2">Item</th>
-                <th>Category</th>
-                <th>Unit</th>
-                <th>Unit Cost</th>
-                <th>Stock</th>
-                <th>Reorder</th>
-                <th>Value</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {list.map((i) => (
-                <tr key={i._id} className="border-t">
-                  <td className="px-4 py-3">{i.name}</td>
-                  <td>{i.category || "-"}</td>
-                  <td>{i.unit}</td>
-                  <td>{fmt.format(i.unitCost)}</td>
-                  <td>{i.stockQty}</td>
-                  <td>{i.reorderLevel}</td>
-                  <td>{fmt.format(i.unitCost * i.stockQty)}</td>
-                  <td className="text-right">
+  <div className="mb-3 text-lg font-semibold">Inventory Snapshot</div>
+
+  {/* Filters for Inventory Snapshot */}
+  <div className="flex gap-4 mb-6">
+    <Input
+      placeholder="Filter by Item"
+      value={itemFilter}
+      onChange={(e) => setItemFilter(e.target.value)}
+    />
+    <Select value={categoryFilter} onChange={(e) => setCategoryFilter(e.target.value)}>
+      <option value="">All Categories</option>
+      {categories.map((category, index) => (
+        <option key={index} value={category}>
+          {category}
+        </option>
+      ))}
+    </Select>
+  </div>
+
+  <div className="overflow-hidden rounded-xl border bg-white shadow">
+    <table className="w-full text-sm">
+      <thead className="bg-neutral-50">
+        <tr className="text-left text-neutral-600">
+          <th className="px-4 py-2">Item</th>
+          <th>Category</th>
+          <th>Unit</th>
+          <th>Unit Cost</th>
+          <th>Stock</th>
+          <th>Reorder</th>
+          <th>Value</th>
+          <th></th>
+        </tr>
+      </thead>
+      <tbody>
+        {filteredItems.map((i) => (
+          <tr key={i._id} className="border-t">
+            <td className="px-4 py-3">{i.name}</td>
+            <td>{i.category || "-"}</td>
+            <td>{i.unit}</td>
+            <td>{fmt.format(i.unitCost)}</td>
+            <td>{i.stockQty}</td>
+            <td>{i.reorderLevel}</td>
+            <td>{fmt.format(i.unitCost * i.stockQty)}</td>
+            <td className="text-right">
+                    <Button tone="primary" onClick={() => openEditForm(i)}>
+                      Edit
+                    </Button>
                     <Button tone="danger" onClick={() => deleteItem(i._id)}>
                       Delete
                     </Button>
                   </td>
-                </tr>
-              ))}
-              {list.length === 0 && (
-                <tr>
-                  <td colSpan={8} className="p-6 text-center text-neutral-500">
-                    No items yet
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </section>
+          </tr>
+        ))}
+        {filteredItems.length === 0 && (
+          <tr>
+            <td colSpan={8} className="p-6 text-center text-neutral-500">
+              No items match your filters
+            </td>
+          </tr>
+        )}
+      </tbody>
+    </table>
+  </div>
+</section>
+
+<EditModal
+        isOpen={isModalOpen}
+        onClose={closeModal}
+        item={editingItem}
+        onSubmit={updateItem}
+      />
+
+        <BarChart data={chartData}/>
 
       {/* Low stock alerts */}
       <section className="mb-8">
@@ -649,6 +866,34 @@ async function updateStockLevel(itemId: string, qty: number, type: "purchase" | 
   <div className="mb-3 text-lg font-semibold">
     Inventory Movements ({from} → {to})
   </div>
+
+  {/* Filters for Inventory Movements */}
+  <div className="flex gap-4 mb-6">
+    <Input
+      type="date"
+      value={movementFrom}
+      onChange={(e) => setMovementFrom(e.target.value)}
+    />
+    <Input
+      type="date"
+      value={movementTo}
+      onChange={(e) => setMovementTo(e.target.value)}
+    />
+    <Input
+      placeholder="Filter by Item"
+      value={movementItemFilter}
+      onChange={(e) => setMovementItemFilter(e.target.value)}
+    />
+    <Select
+      value={movementTypeFilter}
+      onChange={(e) => setMovementTypeFilter(e.target.value)}
+    >
+      <option value="">All Types</option>
+      <option value="purchase">Purchase</option>
+      <option value="consume">Consume</option>
+    </Select>
+  </div>
+
   <div className="overflow-hidden rounded-xl border bg-white shadow">
     <table className="w-full text-sm">
       <thead className="bg-neutral-50">
@@ -664,7 +909,7 @@ async function updateStockLevel(itemId: string, qty: number, type: "purchase" | 
         </tr>
       </thead>
       <tbody>
-        {(moves || []).map((m) => {
+        {filteredMovements.map((m) => {
           const item = list.find((i) => i._id === m.itemId);
           const uc =
             m.type === "purchase" ? m.unitCost || 0 : item?.unitCost || 0;
@@ -698,10 +943,10 @@ async function updateStockLevel(itemId: string, qty: number, type: "purchase" | 
             </tr>
           );
         })}
-        {(moves || []).length === 0 && (
+        {filteredMovements.length === 0 && (
           <tr>
             <td colSpan={8} className="p-6 text-center text-neutral-500">
-              No movements in range
+              No movements match your filters
             </td>
           </tr>
         )}
@@ -709,6 +954,7 @@ async function updateStockLevel(itemId: string, qty: number, type: "purchase" | 
     </table>
   </div>
 </section>
+
 
     </DashboardLayout>
     </AdminGuard>
