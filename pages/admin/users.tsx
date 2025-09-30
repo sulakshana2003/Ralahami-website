@@ -136,11 +136,20 @@ export default function UsersPage() {
     if (status === "unauthenticated") signIn();
   }, [status]);
 
+  const { data: sessionData } = useSession();
+  const adminDisplay =
+    (sessionData?.user as any)?.name ||
+    (sessionData?.user as any)?.email ||
+    "Admin";
+
   const [q, setQ] = useState("");
   const [roleFilter, setRoleFilter] = useState<"" | Role>("");
-  const [statusFilter, setStatusFilter] = useState<"" | "active" | "blocked">(""); // status filter
+  const [statusFilter, setStatusFilter] = useState<"" | "active" | "blocked">("");
+
+  // show all users on one page
+  const SHOW_ALL = true;
   const [page, setPage] = useState(1);
-  const limit = 10;
+  const limit = SHOW_ALL ? 100000 : 10;
 
   const [isOpen, setOpen] = useState(false);
   const [editing, setEditing] = useState<UserItem | null>(null);
@@ -157,6 +166,14 @@ export default function UsersPage() {
     isActive: true,
   });
 
+  // email modal
+  const [emailOpen, setEmailOpen] = useState(false);
+  const [emailMode, setEmailMode] = useState<"single" | "bulk">("single");
+  const [emailTarget, setEmailTarget] = useState<UserItem | null>(null);
+  const [emailSubject, setEmailSubject] = useState("");
+  const [emailBody, setEmailBody] = useState("");
+  const [emailBusy, setEmailBusy] = useState(false);
+
   const url = useMemo(() => {
     const params = new URLSearchParams({
       q,
@@ -166,13 +183,12 @@ export default function UsersPage() {
     if (roleFilter) params.append("role", roleFilter);
     if (statusFilter) params.append("status", statusFilter);
     return `/api/users?${params.toString()}`;
-  }, [q, page, roleFilter, statusFilter]);
+  }, [q, page, roleFilter, statusFilter, limit]);
 
   const { data, mutate, isLoading, error } = useSWR(url, fetcher);
   const items: UserItem[] = data?.items ?? [];
   const pages: number = data?.pages ?? 1;
 
-  // Client-side status filtering too (works even if backend ignores ?status)
   const visibleItems = useMemo(() => {
     return items.filter((u) =>
       statusFilter === ""
@@ -236,9 +252,8 @@ export default function UsersPage() {
     await mutate();
   }
 
-  // ---------- Generate Report as PDF (manual print/save) ----------
+  // ---------- Generate Report (print/save) ----------
   async function generateReport() {
-    // fetch ALL users matching current search/filters (ignores pagination)
     const params = new URLSearchParams({ q, page: "1", limit: "100000" });
     if (roleFilter) params.append("role", roleFilter);
     if (statusFilter) params.append("status", statusFilter);
@@ -252,33 +267,116 @@ export default function UsersPage() {
     const allData = await allRes.json();
     const allItems: UserItem[] = (allData?.items ?? []) as UserItem[];
 
-    // logo
     const logoDataUrl = await toDataUrl("/images/RalahamiLogo.png");
 
-    // compute totals
     const totalUsers = allItems.length;
     const totalAdmins = allItems.filter((u) => u.role === "admin").length;
     const totalActive = allItems.filter((u) => u.isActive).length;
     const totalBlocked = totalUsers - totalActive;
 
-    // build print-friendly HTML (no auto print)
+    // --- aggregate by date (YYYY-MM-DD)
+    const dateCounts: Record<string, number> = {};
+    for (const u of allItems) {
+      const d = new Date(u.createdAt);
+      if (!isNaN(d.getTime())) {
+        const key = d.toISOString().slice(0, 10);
+        dateCounts[key] = (dateCounts[key] || 0) + 1;
+      }
+    }
+    const dateKeys = Object.keys(dateCounts).sort();
+    const maxCount = dateKeys.length ? Math.max(...dateKeys.map(k => dateCounts[k])) : 0;
+
+    // --- LINE CHART (replaces bar)
+    // canvas
+    const W = 820, H = 260;
+    const m = { t: 28, r: 20, b: 56, l: 40 };
+    const iw = W - m.l - m.r;
+    const ih = H - m.t - m.b;
+
+    const n = Math.max(dateKeys.length, 1);
+    const step = n > 1 ? iw / (n - 1) : 0;
+
+    const points = dateKeys.map((k, i) => {
+      const v = dateCounts[k];
+      const y = m.t + ih - (maxCount ? (v / maxCount) * ih : 0);
+      const x = m.l + i * step;
+      return { x, y, k, v };
+    });
+
+    const path = points.map((p, i) => (i ? `L ${p.x} ${p.y}` : `M ${p.x} ${p.y}`)).join(" ");
+    const dots = points.map(p =>
+      `<circle cx="${p.x}" cy="${p.y}" r="3.5" fill="#4f46e5"><title>${p.k}: ${p.v}</title></circle>`
+    ).join("");
+
+    const gridTicks = (() => {
+      const ticks = 5;
+      let out = "";
+      for (let t = 0; t <= ticks; t++) {
+        const val = Math.round((maxCount * t) / ticks);
+        const y = m.t + ih - (ih * t) / ticks;
+        out += `<line x1="${m.l}" y1="${y}" x2="${W - m.r}" y2="${y}" stroke="#e5e7eb"></line>`;
+        out += `<text x="${m.l - 6}" y="${y + 3}" font-size="10" text-anchor="end" fill="#374151">${val}</text>`;
+      }
+      return out;
+    })();
+
+    const xLabels = dateKeys.map((k, i) => {
+      const x = m.l + i * step;
+      const y = H - 8;
+      return `<text x="${x}" y="${y}" font-size="10" text-anchor="end" transform="rotate(-40 ${x},${y})" fill="#374151">${k}</text>`;
+    }).join("");
+
+    const lineChartSvg = `
+<svg width="100%" height="240" viewBox="0 0 ${W} ${H}" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0" y="0" width="${W}" height="${H}" fill="white"/>
+  <text x="${W/2}" y="18" text-anchor="middle" font-size="12" fill="#111827" font-weight="600">Users per Registration Date</text>
+  ${gridTicks}
+  <polyline points="${points.map(p=>`${p.x},${p.y}`).join(" ")}" fill="none" stroke="#c7d2fe" stroke-width="8" stroke-linecap="round" />
+  <path d="${path}" fill="none" stroke="#4f46e5" stroke-width="2.5" stroke-linecap="round" />
+  ${dots}
+  ${xLabels}
+  <rect x="${m.l}" y="${m.t}" width="${iw}" height="${ih}" fill="none" stroke="#e5e7eb"/>
+</svg>`.trim();
+
+    // --- DONUT (Active vs Blocked)
+    const D = 300, cx = D/2, cy = D/2, r = 90, sw = 26, circ = 2*Math.PI*r;
+    const active = totalActive, blocked = totalBlocked, totalAB = Math.max(active+blocked,1);
+    const activeLen = (active/totalAB)*circ, blockedLen = (blocked/totalAB)*circ;
+
+    const donutSvg = `
+<svg width="100%" height="240" viewBox="0 0 ${D} ${D}" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">
+  <rect x="0" y="0" width="${D}" height="${D}" fill="white"/>
+  <text x="${D/2}" y="20" text-anchor="middle" font-size="12" fill="#111827" font-weight="600">Active vs Blocked</text>
+  <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#e5e7eb" stroke-width="${sw}" />
+  <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#10b981" stroke-width="${sw}"
+          stroke-dasharray="${activeLen} ${circ}" stroke-dashoffset="0" transform="rotate(-90 ${cx} ${cy})"/>
+  <circle cx="${cx}" cy="${cy}" r="${r}" fill="none" stroke="#ef4444" stroke-width="${sw}"
+          stroke-dasharray="${blockedLen} ${circ}" stroke-dashoffset="-${activeLen}" transform="rotate(-90 ${cx} ${cy})"/>
+  <text x="${cx}" y="${cy + 5}" text-anchor="middle" font-size="18" fill="#111827" font-weight="700">${totalAB}</text>
+  <text x="${cx}" y="${cy + 24}" text-anchor="middle" font-size="10" fill="#6b7280">users</text>
+  <rect x="${cx - 90}" y="${D - 42}" width="10" height="10" fill="#10b981"/>
+  <text x="${cx - 74}" y="${D - 33}" font-size="11" fill="#374151">Active (${active})</text>
+  <rect x="${cx + 20}" y="${D - 42}" width="10" height="10" fill="#ef4444"/>
+  <text x="${cx + 36}" y="${D - 33}" font-size="11" fill="#374151">Blocked (${blocked})</text>
+</svg>`.trim();
+
+    // rows
+    const rowsHtml = allItems.map((u) => {
+      return `<tr>
+        <td>${u.name || ""}</td>
+        <td>${u.email || ""}</td>
+        <td>${u.role}</td>
+        <td>${u.isActive ? "Active" : "Blocked"}</td>
+        <td>${u.phone || "-"}</td>
+        <td>${u.address || "-"}</td>
+        <td>${fmtDate(u.createdAt)}</td>
+      </tr>`;
+    }).join("");
+
+    // HTML
     const now = new Date();
     const title = "User Report";
     const subtitle = now.toLocaleString();
-
-    const rowsHtml = allItems
-      .map((u) => {
-        return `<tr>
-          <td>${u.name || ""}</td>
-          <td>${u.email || ""}</td>
-          <td>${u.role}</td>
-          <td>${u.isActive ? "Active" : "Blocked"}</td>
-          <td>${u.phone || "-"}</td>
-          <td>${u.address || "-"}</td>
-          <td>${fmtDate(u.createdAt)}</td>
-        </tr>`;
-      })
-      .join("");
 
     const html = `<!doctype html>
 <html>
@@ -293,13 +391,23 @@ export default function UsersPage() {
   .logo { height:42px; width:auto; }
   .title { font-size:20px; font-weight:700; margin:0; }
   .subtitle { color:#6B7280; margin-top:2px; font-size:12px; }
-  .cards { display:grid; grid-template-columns: repeat(4, 1fr); gap:8px; margin:12px 0 16px; page-break-inside: avoid; }
-  .card { border:1px solid #E5E7EB; border-radius:10px; padding:10px; }
+  .cards { display:grid; grid-template-columns: repeat(4, 1fr); gap:12px; margin:12px 0 12px; page-break-inside: avoid; }
+  .card { border:1px solid #E5E7EB; border-radius:10px; padding:10px; background:#fff; }
   .card .label { font-size:11px; color:#6B7280; }
   .card .value { font-size:18px; font-weight:700; margin-top:2px; }
+  /* tighter gap to table */
+  .charts {
+    display:grid;
+    grid-template-columns: minmax(520px, 1fr) 340px;
+    gap:16px;
+    align-items:start;
+    margin:6px 0 8px; /* bottom margin controls gap to table */
+  }
+  .chartCard { border:1px solid #E5E7EB; border-radius:10px; padding:10px; background:#fff; }
+  .chartCard svg { display:block; width:100%; height:240px; }
   table { width:100%; border-collapse: collapse; }
-  th, td { border:1px solid #E5E7EB; padding:6px 8px; font-size:11px; }
   thead th { background:#F3F4F6; text-align:left; color:#374151; }
+  th, td { border:1px solid #E5E7EB; padding:6px 8px; font-size:11px; }
   tr { page-break-inside: avoid; }
   tfoot td { background:#F9FAFB; font-weight:600; }
   @media print { .noprint { display: none !important; } }
@@ -319,6 +427,11 @@ export default function UsersPage() {
     <div class="card"><div class="label">Admins</div><div class="value">${totalAdmins}</div></div>
     <div class="card"><div class="label">Active</div><div class="value">${totalActive}</div></div>
     <div class="card"><div class="label">Blocked</div><div class="value">${totalBlocked}</div></div>
+  </div>
+
+  <div class="charts">
+    <div class="chartCard">${lineChartSvg}</div>
+    <div class="chartCard">${donutSvg}</div>
   </div>
 
   <table>
@@ -355,6 +468,72 @@ export default function UsersPage() {
     w.document.close();
   }
 
+  // ---------- Email (single) ----------
+  async function sendEmailSingle() {
+    if (!emailTarget?._id) return;
+    if (!emailSubject || !emailBody) {
+      alert("Subject and message are required");
+      return;
+    }
+    setEmailBusy(true);
+    try {
+      const r = await fetch(`/api/users/send-email`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userId: emailTarget._id,
+          subject: emailSubject,
+          message: emailBody,
+          sentBy: adminDisplay,
+        }),
+      });
+      if (!r.ok) throw new Error(await r.text());
+      alert("Email sent");
+      setEmailOpen(false);
+    } catch (e: any) {
+      alert(e.message || "Failed to send email");
+    } finally {
+      setEmailBusy(false);
+    }
+  }
+
+  // ---------- Email (bulk) ----------
+  async function sendEmailBulk() {
+    const ids = visibleItems.map((u) => u._id);
+    if (ids.length === 0) {
+      alert("No users in current list.");
+      return;
+    }
+    if (!emailSubject || !emailBody) {
+      alert("Subject and message are required");
+      return;
+    }
+    if (!confirm(`Send to ${ids.length} users?`)) return;
+
+    setEmailBusy(true);
+    try {
+      const r = await fetch(`/api/users/send-email`, {
+        method: "POST",
+        credentials: "same-origin",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          userIds: ids,
+          subject: emailSubject,
+          message: emailBody,
+          sentBy: adminDisplay,
+        }),
+      });
+      if (!r.ok) throw new Error(await r.text());
+      alert("Emails sent");
+      setEmailOpen(false);
+    } catch (e: any) {
+      alert(e.message || "Failed to send emails");
+    } finally {
+      setEmailBusy(false);
+    }
+  }
+
   return (
     <DashboardLayout>
       {/* Header */}
@@ -384,10 +563,24 @@ export default function UsersPage() {
             + Add User
           </Button>
           <Button tone="ghost" onClick={generateReport}>Generate Report</Button>
+
+          {/* Email all currently visible users */}
+          <Button
+            tone="ghost"
+            onClick={() => {
+              setEmailMode("bulk");
+              setEmailTarget(null);
+              setEmailSubject("");
+              setEmailBody("");
+              setEmailOpen(true);
+            }}
+          >
+            Email All (Current List)
+          </Button>
         </div>
       </div>
 
-      {/* Stats (based on currently visible items) */}
+      {/* Stats */}
       <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4 mb-8">
         <StatCard title="Total Users" value={visibleItems.length} />
         <StatCard title="Admins" value={visibleItems.filter((u) => u.role === "admin").length} />
@@ -406,7 +599,6 @@ export default function UsersPage() {
           }}
         />
 
-        {/* Role filter — compact */}
         <div className="w-28">
           <Select
             value={roleFilter}
@@ -419,7 +611,6 @@ export default function UsersPage() {
           </Select>
         </div>
 
-        {/* Status filter — compact */}
         <div className="w-28">
           <Select
             value={statusFilter}
@@ -457,7 +648,6 @@ export default function UsersPage() {
             ) : (
               visibleItems.map((u) => (
                 <tr key={u._id} className="border-t hover:bg-neutral-50">
-                  {/* Only the name opens the details modal */}
                   <td className="px-4 py-3">
                     <button
                       type="button"
@@ -502,6 +692,20 @@ export default function UsersPage() {
                     <Button tone="danger" onClick={(e) => { e.stopPropagation(); remove(u._id); }}>
                       Delete
                     </Button>
+                    <Button
+                      tone="ghost"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        setEmailMode("single");
+                        setEmailTarget(u);
+                        setEmailSubject("");
+                        setEmailBody("");
+                        setEmailOpen(true);
+                      }}
+                      title="Send email to this user"
+                    >
+                      Email
+                    </Button>
                   </td>
                 </tr>
               ))
@@ -510,14 +714,16 @@ export default function UsersPage() {
         </table>
       </div>
 
-      {/* Pagination */}
-      <div className="mt-4 flex justify-between text-sm">
-        <span>Page {page} of {pages}</span>
-        <div className="flex gap-2">
-          <Button tone="ghost" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</Button>
-          <Button tone="ghost" disabled={page >= pages} onClick={() => setPage((p) => Math.min(pages, p + 1))}>Next</Button>
+      {/* Pagination (kept for completeness but hidden if SHOW_ALL) */}
+      {!SHOW_ALL && (
+        <div className="mt-4 flex justify-between text-sm">
+          <span>Page {page} of {pages}</span>
+          <div className="flex gap-2">
+            <Button tone="ghost" disabled={page <= 1} onClick={() => setPage((p) => Math.max(1, p - 1))}>Prev</Button>
+            <Button tone="ghost" disabled={page >= pages} onClick={() => setPage((p) => Math.min(pages, p + 1))}>Next</Button>
+          </div>
         </div>
-      </div>
+      )}
 
       {/* Create / Edit Modal */}
       <Modal
@@ -558,6 +764,54 @@ export default function UsersPage() {
             <p><strong>Joined:</strong> {new Date(viewUser.createdAt).toLocaleString()}</p>
           </div>
         )}
+      </Modal>
+
+      {/* Email compose modal */}
+      <Modal
+        open={emailOpen}
+        onClose={() => setEmailOpen(false)}
+        title={emailMode === "single" ? `Email: ${emailTarget?.name || ""}` : "Email All (Current List)"}
+        footer={
+          <>
+            <Button tone="ghost" onClick={() => setEmailOpen(false)}>Cancel</Button>
+            {emailMode === "single" ? (
+              <Button onClick={sendEmailSingle} disabled={emailBusy}>
+                {emailBusy ? "Sending..." : "Send"}
+              </Button>
+            ) : (
+              <Button onClick={sendEmailBulk} disabled={emailBusy}>
+                {emailBusy ? "Sending..." : `Send to ${visibleItems.length}`}
+              </Button>
+            )}
+          </>
+        }
+      >
+        <div className="space-y-3">
+          <div>
+            <div className="text-xs text-neutral-500 mb-1">From</div>
+            <Input value={`${adminDisplay} (admin)`} readOnly />
+          </div>
+          <div>
+            <div className="text-xs text-neutral-500 mb-1">Subject</div>
+            <Input
+              placeholder="Subject"
+              value={emailSubject}
+              onChange={(e) => setEmailSubject(e.target.value)}
+            />
+          </div>
+          <div>
+            <div className="text-xs text-neutral-500 mb-1">Message</div>
+            <textarea
+              className="h-36 w-full rounded-xl border border-neutral-300 bg-white p-3 text-sm focus:ring-2 focus:ring-indigo-200"
+              placeholder="Write your message..."
+              value={emailBody}
+              onChange={(e) => setEmailBody(e.target.value)}
+            />
+            <div className="mt-2 text-[11px] text-neutral-500">
+              Your restaurant logo is embedded automatically. A footer “Sent by: {adminDisplay}” will be added.
+            </div>
+          </div>
+        </div>
       </Modal>
     </DashboardLayout>
   );
