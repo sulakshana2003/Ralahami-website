@@ -16,6 +16,8 @@ import EditModal from "../components/inventory/EditModal";
 import LowStock from "../components/inventory/LowStock";
 import MovementForm from "../components/inventory/MovementForm";
 import MovementsTable from "../components/inventory/MovementsTable";
+import Chart from "chart.js/auto";
+
 
 import { Item, Movement } from "../types/inventory";
 import { generateInventoryReport } from "../components/inventory/report";
@@ -41,6 +43,56 @@ function shift(days: number) {
   d.setDate(d.getDate() + days);
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
 }
+
+async function buildStockChartImage(items: Array<{ name: string; stockQty: number; unit: string }>) {
+  // create an off-screen canvas
+  const canvas = document.createElement("canvas");
+  canvas.width = 1200;  // fixed size so the image is crisp
+  canvas.height = 500;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return "";
+
+  const labels = items.map(i => `${i.name} (${i.unit})`);
+  const data = items.map(i => i.stockQty);
+
+  // create chart
+  const chart = new Chart(ctx, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Stock Level",
+          data,
+          backgroundColor: "rgba(75, 192, 192, 0.2)",
+          borderColor: "rgba(75, 192, 192, 1)",
+          borderWidth: 1,
+        },
+      ],
+    },
+    options: {
+      responsive: false,         // important for off-screen canvas
+      animation: false,          // faster
+      plugins: {
+        title: { display: true, text: "Inventory Stock Levels" },
+        legend: { display: true },
+        tooltip: { enabled: false },
+      },
+      scales: {
+        y: { beginAtZero: true },
+      },
+    },
+  });
+
+  // snapshot as PNG
+  const url = canvas.toDataURL("image/png");
+
+  // cleanup
+  chart.destroy();
+
+  return url;
+}
+
 
 export default function InventoryAdminPage() {
   const { data: items, mutate: mutateItems } = useSWR<Item[]>("/api/inventory/items", fetcher);
@@ -223,18 +275,25 @@ export default function InventoryAdminPage() {
 
   // ----- Report -----
   async function generateReport() {
-    const allItems: Item[] = list;
-    const allMoves: Movement[] = Array.isArray(moves) ? moves : [];
-    await generateInventoryReport({
-      items: allItems,
-      movements: allMoves,
-      from,
-      to,
-      lowStockCount: lowStock.length,
-      totalValue,
-      fmt,
-    });
-  }
+  const allItems: Item[] = list;
+  const allMoves: Movement[] = Array.isArray(moves) ? moves : [];
+
+  // make the chart image for the report
+  const chartDataUrl = await buildStockChartImage(
+    list.map(i => ({ name: i.name, stockQty: i.stockQty, unit: i.unit }))
+  );
+
+  await generateInventoryReport({
+    items: allItems,
+    movements: allMoves,
+    from,
+    to,
+    lowStockCount: lowStock.length,
+    totalValue,
+    fmt,
+    chartDataUrl,         // ✅ pass it in
+  });
+}
 
   return (
     <AdminGuard>

@@ -1,10 +1,14 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
+
 import { Item, Movement } from "../../types/inventory";
 
 function safe(s: any) {
-  return String(s ?? "").replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!));
+  return String(s ?? "").replace(/[&<>"']/g, (c) => (
+    { "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[c]!
+  ));
 }
+
 async function toDataUrl(url: string) {
   try {
     const res = await fetch(url, { credentials: "same-origin" });
@@ -29,6 +33,7 @@ export async function generateInventoryReport({
   lowStockCount,
   totalValue,
   fmt,
+  chartDataUrl, // optional PNG data URL of your bar chart
 }: {
   items: Item[];
   movements: Movement[];
@@ -37,6 +42,7 @@ export async function generateInventoryReport({
   lowStockCount: number;
   totalValue: number;
   fmt: Intl.NumberFormat;
+  chartDataUrl?: string;
 }) {
   const logo = await toDataUrl("/images/RalahamiLogo.png");
   const now = new Date();
@@ -81,6 +87,7 @@ export async function generateInventoryReport({
 <meta charset="utf-8"/>
 <title>Inventory Report</title>
 <style>
+  :root { color-scheme: light only; }
   body { font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif; color:#111827; margin:24px; }
   .header { display:flex; align-items:center; gap:14px; }
   .logo { height:42px; width:auto; }
@@ -96,6 +103,10 @@ export async function generateInventoryReport({
   thead th { background:#F9FAFB; text-align:left; color:#374151; }
   tfoot td { background:#F9FAFB; font-weight:600; }
   .mt-16 { margin-top:16px; }
+
+  .chart-wrap { margin: 16px 0 22px; border:1px solid #E5E7EB; border-radius:12px; padding:12px; }
+  .chart-title { font-weight:700; margin-bottom:8px; }
+  .chart-img { width:100%; height:auto; display:block; }
 </style>
 </head>
 <body>
@@ -113,6 +124,12 @@ export async function generateInventoryReport({
     <div class="card"><div class="label">Stock Value</div><div class="value">${safe(fmt.format(totalValue))}</div></div>
     <div class="card"><div class="label">Movements (range)</div><div class="value">${movements.length}</div></div>
   </div>
+
+  ${chartDataUrl ? `
+  <div class="chart-wrap">
+    <div class="chart-title">Inventory Stock Levels</div>
+    <img class="chart-img" src="${chartDataUrl}" alt="Inventory Stock Levels Bar Chart" />
+  </div>` : ''}
 
   <h2>Inventory Snapshot</h2>
   <table>
