@@ -54,10 +54,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (req.method === "DELETE") {
-      const { id } = req.query;
-      if (!id || typeof id !== "string") return res.status(400).json({ message: "Missing id" });
-      await Employee.findByIdAndDelete(id);
-      return res.json({ ok: true });
+      // The fix is here: Reading from `req.body` instead of `req.query`
+      const { id } = req.body;
+
+      if (!id) {
+        return res.status(400).json({ message: "Missing employee id in request body" });
+      }
+
+      const deletedEmployee = await Employee.findByIdAndDelete(id);
+
+      if (!deletedEmployee) {
+        return res.status(404).json({ message: "Employee not found" });
+      }
+
+      return res.status(200).json({ ok: true, message: "Employee deleted successfully" });
     }
 
     res.setHeader("Allow", "GET,POST,PUT,DELETE");
