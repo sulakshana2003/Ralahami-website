@@ -61,22 +61,20 @@ export default function SignatureDishes() {
           <h2 className="mt-2 text-3xl sm:text-4xl font-semibold">
             Signature Dishes
           </h2>
-          <p className="mt-3 text-base text-neutral-600">
-            Taste our chef’s favorites
-          </p>
+          <p className="mt-3 text-base text-neutral-600">Taste our chef’s favorites</p>
         </div>
 
-        {/* CircularGallery */}
+        {/* CircularGallery (captions hidden) */}
         <div style={{ height: "600px", position: "relative" }}>
           <CircularGallery
             bend={3}
             textColor="#ffffff"
             borderRadius={0.05}
             scrollEase={0.02}
+            showText={false}
             items={dishes.map((d) => ({
               image: d.images?.[0] || "/images/placeholder.png",
-              // 👇 combine name and price as text, since CircularGallery shows "text" under image
-              text: `${d.name} – Rs. ${d.finalPrice ?? d.price}`,
+              // no text -> no caption rendered
             }))}
           />
         </div>
