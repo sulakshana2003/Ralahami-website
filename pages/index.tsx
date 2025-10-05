@@ -9,6 +9,8 @@ import AdminAutoRedirect from "./components/AdminAutoRedirect"
 import SignatureDishes from "./components/SignatureDishes"
 import Hero  from "./components/Hero";
 import Promotions from "./components/Promotions"
+import Aboutus from "./components/AboutUs"
+import Contact from "./components/ContactUs"
 
 // ---------- Helper ----------
 const Container = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => (
@@ -36,7 +38,7 @@ const SectionHeading = ({ eyebrow, title, subtitle }: { eyebrow?: string; title:
 
 // ---------- Footer ----------
 const Footer = () => (
-  <footer className="bg-black text-white py-12">
+  <footer className="bg-black text-white py-12 relative z-20">
     <Container className="grid gap-8 sm:grid-cols-2 lg:grid-cols-4">
       <div>
         <Image src="/images/RalahamiLogo.png" alt="Ralahami logo" width={40} height={40} />
@@ -77,7 +79,8 @@ const HomePage = () => (
     <main>
       <Hero />
       <SignatureDishes />
-      {/* <Promotions /> */}
+      <Promotions /> 
+      <Aboutus/>
     </main>
     <Footer />
   </>

@@ -4,34 +4,31 @@ import useSWR from "swr";
 import { useState } from "react";
 import DashboardLayout from "../components/DashboardLayout";
 import AdminGuard from "../components/AdminGuard";
+import toast from "react-hot-toast";
 
-// ---------- helpers ----------
+/* ---------- helpers ---------- */
 const fetcher = (url: string) => fetch(url).then((r) => r.json());
-const fmt = new Intl.NumberFormat("en-LK", {
-  style: "currency",
-  currency: "LKR",
-});
+const fmt = new Intl.NumberFormat("en-LK", { style: "currency", currency: "LKR" });
 const today = (shift = 0) => {
   const d = new Date();
   d.setDate(d.getDate() + shift);
-  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
-    2,
-    "0"
-  )}-${String(d.getDate()).padStart(2, "0")}`;
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(
+    d.getDate()
+  ).padStart(2, "0")}`;
 };
 
-// ---------- small UI ----------
+/* ---------- small UI ---------- */
 function Button({
   children,
   tone = "primary",
   ...props
 }: React.ButtonHTMLAttributes<HTMLButtonElement> & {
-  tone?: "primary" | "danger" | "ghost";
+  tone?: "primary" | "danger" | "ghost" | "success";
 }) {
   const map = {
     primary: "bg-indigo-600 text-white hover:bg-indigo-700",
-    ghost:
-      "bg-white border border-neutral-300 text-neutral-700 hover:bg-neutral-50",
+    success: "bg-emerald-600 text-white hover:bg-emerald-700",
+    ghost: "bg-white border border-neutral-300 text-neutral-700 hover:bg-neutral-50",
     danger: "bg-white border border-rose-300 text-rose-600 hover:bg-rose-50",
   };
   return (
@@ -66,178 +63,141 @@ function StatCard({ title, value }: { title: string; value: string | number }) {
   );
 }
 
-function Section({
-  title,
-  children,
-}: {
-  title: string;
-  children: React.ReactNode;
-}) {
+function Section({ title, children }: { title: string; children: React.ReactNode }) {
   return (
     <section className="mt-8">
       <h2 className="mb-3 text-lg font-semibold">{title}</h2>
-      <div className="bg-white rounded-xl shadow p-4 overflow-x-auto">
-        {children}
-      </div>
+      <div className="bg-white rounded-xl shadow p-4 overflow-x-auto">{children}</div>
     </section>
   );
 }
 
-// ---------- types ----------
-type Summary = {
-  netProfit: number;
-  online: { revenue: number; profit: number };
-  reservations: { revenue: number };
-  payroll: { outflow: number };
-  inventory: { purchases: number };
-};
-type OnlineOrder = {
-  _id: string;
-  date: string;
-  orderId: string;
-  revenue: number;
-  cost: number;
-};
-type Reservation = {
-  _id: string;
-  date: string;
-  slot: string;
-  name: string;
-  partySize: number;
-  amount: number;
-  paymentStatus: string;
-};
-type Employee = { _id: string; name: string; role: string; baseSalary: number };
-type Payroll = {
-  _id: string;
-  date: string;
-  employeeId: string;
-  type: string;
-  amount: number;
-};
-type InventoryItem = {
-  _id: string;
-  name: string;
-  unit: string;
-  unitCost: number;
-  stockQty: number;
-};
-type InventoryMove = {
-  _id: string;
-  date: string;
-  itemId: string;
-  type: string;
-  qty: number;
-  unitCost?: number;
-  note?: string;
-};
-type Product = {
-  _id: string;
-  name: string;
-  category?: string;
-  price: number;
-  stock: number;
-  isAvailable: boolean;
-};
-
-// ---------- main ----------
-export default function FinanceAdminPage() {
+/* ---------- main ---------- */
+export default function FinancePage() {
   const [tab, setTab] = useState<
     | "dashboard"
-    | "revenues"
     | "reservations"
     | "inventory"
     | "employees"
     | "products"
+    | "promotions"
     | "reports"
   >("dashboard");
+
   const [from, setFrom] = useState(today(-7));
   const [to, setTo] = useState(today());
 
-  // SWR
-  const { data: summary } = useSWR<Summary>(
-    `/api/finance/summary?from=${from}&to=${to}`,
-    fetcher
-  );
-  const { data: orders, mutate: refetchOrders } = useSWR<OnlineOrder[]>(
-    `/api/orders?from=${from}&to=${to}`,
-    fetcher
-  );
-  const { data: reservations } = useSWR<Reservation[]>(
-    `/api/reservations/reservations?from=${from}&to=${to}`,
-    fetcher
-  );
-  const { data: employees } = useSWR<Employee[]>(
-    "/api/Employee/employees",
-    fetcher
-  );
-  const { data: payroll } = useSWR<Payroll[]>(
-    `/api/Employee/payroll?from=${from}&to=${to}`,
-    fetcher
-  );
-  const { data: items } = useSWR<InventoryItem[]>(
-    "/api/inventory/items",
-    fetcher
-  );
-  const { data: moves } = useSWR<InventoryMove[]>(
-    `/api/inventory/movements?from=${from}&to=${to}`,
-    fetcher
-  );
-  const { data: products, mutate: refetchProducts } = useSWR<Product[]>(
-    "/api/products",
-    fetcher
-  );
+  const { data, mutate } = useSWR(`/api/finance?from=${from}&to=${to}`, fetcher);
 
-  // actions
-  async function addOrder(e: React.FormEvent<HTMLFormElement>) {
-    e.preventDefault();
-    const fd = new FormData(e.currentTarget);
-    const body = {
-      date: fd.get("date"),
-      orderId: fd.get("orderId"),
-      revenue: +(fd.get("revenue") || 0),
-      cost: +(fd.get("cost") || 0),
-      note: fd.get("note"),
-    };
-    await fetch("/api/orders", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    e.currentTarget.reset();
-    refetchOrders();
-  }
+  const summary = data?.summary;
+  const {
+    orders,
+    reservations,
+    employees,
+    payrolls,
+    inventoryItems,
+    inventoryMoves,
+    products,
+    promotions,
+  } = data?.data || {};
 
+  /* ---------- API actions ---------- */
   async function addProduct(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
-    const body = {
-      name: fd.get("name"),
-      slug: fd.get("slug"),
-      price: +(fd.get("price") || 0),
-      stock: +(fd.get("stock") || 0),
-      category: fd.get("category"),
-      isAvailable: fd.get("isAvailable") === "on",
-    };
-    await fetch("/api/products", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    });
-    e.currentTarget.reset();
-    refetchProducts();
+    const body = Object.fromEntries(fd.entries());
+    try {
+      const res = await fetch(`/api/finance?action=product`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      toast.success("Product added!");
+      e.currentTarget.reset();
+      mutate();
+    } catch (err) {
+      toast.error("Failed to add product");
+    }
   }
 
   async function deleteProduct(id: string) {
     if (!confirm("Delete product?")) return;
-    await fetch(`/api/products?id=${id}`, { method: "DELETE" });
-    refetchProducts();
+    try {
+      const res = await fetch(`/api/finance?action=product&id=${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error(await res.text());
+      toast.success("Product deleted!");
+      mutate();
+    } catch {
+      toast.error("Delete failed");
+    }
   }
 
-  function downloadCSV() {
-    window.open(`/api/finance/report?from=${from}&to=${to}`, "_blank");
+  async function addPromotion(e: React.FormEvent<HTMLFormElement>) {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    const body = Object.fromEntries(fd.entries());
+    try {
+      const res = await fetch(`/api/finance?action=promotion`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(body),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      toast.success("Promotion added!");
+      e.currentTarget.reset();
+      mutate();
+    } catch (err) {
+      toast.error("Failed to add promotion");
+    }
   }
 
+  async function deletePromotion(id: string) {
+    if (!confirm("Delete promotion?")) return;
+    try {
+      const res = await fetch(`/api/finance?action=promotion&id=${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error(await res.text());
+      toast.success("Promotion deleted!");
+      mutate();
+    } catch {
+      toast.error("Delete failed");
+    }
+  }
+
+  async function togglePromotion(id: string, current: boolean) {
+    try {
+      const res = await fetch(`/api/finance?action=promotion&id=${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ isActive: !current }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      toast.success("Status updated");
+      mutate();
+    } catch {
+      toast.error("Failed to update");
+    }
+  }
+
+  async function editPromotion(id: string) {
+    const title = prompt("New title?");
+    const desc = prompt("New description?");
+    if (!title || !desc) return;
+    try {
+      const res = await fetch(`/api/finance?action=promotion&id=${id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, desc }),
+      });
+      if (!res.ok) throw new Error(await res.text());
+      toast.success("Promotion updated");
+      mutate();
+    } catch {
+      toast.error("Edit failed");
+    }
+  }
+
+  /* ---------- UI ---------- */
   return (
     <AdminGuard>
       <DashboardLayout>
@@ -247,11 +207,11 @@ export default function FinanceAdminPage() {
           <div className="flex gap-2 flex-wrap mt-3 sm:mt-0">
             {[
               "dashboard",
-              "revenues",
               "reservations",
               "inventory",
               "employees",
               "products",
+              "promotions",
               "reports",
             ].map((t) => (
               <Button
@@ -287,84 +247,14 @@ export default function FinanceAdminPage() {
         {tab === "dashboard" && summary && (
           <Section title="Summary">
             <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-              <StatCard
-                title="Online Revenue"
-                value={fmt.format(summary.online.revenue)}
-              />
-              <StatCard
-                title="Online Profit"
-                value={fmt.format(summary.online.profit)}
-              />
-              <StatCard
-                title="Reservation Revenue"
-                value={fmt.format(summary.reservations.revenue)}
-              />
-              <StatCard
-                title="Payroll Outflow"
-                value={fmt.format(summary.payroll.outflow)}
-              />
-              <StatCard
-                title="Inventory Purchases"
-                value={fmt.format(summary.inventory.purchases)}
-              />
-              <StatCard
-                title="Net Profit"
-                value={fmt.format(summary.netProfit)}
-              />
+              <StatCard title="Online Revenue" value={fmt.format(summary.online.revenue)} />
+              <StatCard title="Online Profit" value={fmt.format(summary.online.profit)} />
+              <StatCard title="Reservation Revenue" value={fmt.format(summary.reservations.revenue)} />
+              <StatCard title="Payroll Outflow" value={fmt.format(summary.payroll.outflow)} />
+              <StatCard title="Inventory Purchases" value={fmt.format(summary.inventory.purchases)} />
+              <StatCard title="Net Profit" value={fmt.format(summary.netProfit)} />
             </div>
           </Section>
-        )}
-
-        {/* Revenues */}
-        {tab === "revenues" && (
-          <>
-            <Section title="Add Online Order">
-              <form onSubmit={addOrder} className="grid sm:grid-cols-6 gap-3">
-                <Input type="date" name="date" defaultValue={to} />
-                <Input name="orderId" placeholder="Order ID" />
-                <Input type="number" name="revenue" placeholder="Revenue" />
-                <Input type="number" name="cost" placeholder="Cost" />
-                <Input
-                  name="note"
-                  placeholder="Note"
-                  className="sm:col-span-2"
-                />
-                <Button>Add</Button>
-              </form>
-            </Section>
-            <Section title="Orders">
-              <table className="w-full text-sm">
-                <thead className="bg-neutral-50">
-                  <tr>
-                    <th>Date</th>
-                    <th>Order</th>
-                    <th>Revenue</th>
-                    <th>Cost</th>
-                    <th>Profit</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {(orders || []).map((o) => (
-                    <tr key={o._id} className="border-t">
-                      <td className="py-2">{o.date}</td>
-                      <td>{o.orderId}</td>
-                      <td>{fmt.format(o.revenue)}</td>
-                      <td>{fmt.format(o.cost)}</td>
-                      <td
-                        className={
-                          o.revenue - o.cost >= 0
-                            ? "text-green-600"
-                            : "text-red-600"
-                        }
-                      >
-                        {fmt.format(o.revenue - o.cost)}
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </Section>
-          </>
         )}
 
         {/* Reservations */}
@@ -382,7 +272,7 @@ export default function FinanceAdminPage() {
                 </tr>
               </thead>
               <tbody>
-                {(reservations || []).map((r) => (
+                {(reservations || []).map((r: any) => (
                   <tr key={r._id} className="border-t">
                     <td className="py-2">{r.date}</td>
                     <td>{r.slot}</td>
@@ -411,7 +301,7 @@ export default function FinanceAdminPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(items || []).map((i) => (
+                  {(inventoryItems || []).map((i: any) => (
                     <tr key={i._id} className="border-t">
                       <td className="py-2">{i.name}</td>
                       <td>{i.unit}</td>
@@ -435,12 +325,11 @@ export default function FinanceAdminPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(moves || []).map((m) => (
+                  {(inventoryMoves || []).map((m: any) => (
                     <tr key={m._id} className="border-t">
                       <td className="py-2">{m.date}</td>
                       <td>
-                        {items?.find((i) => i._id === m.itemId)?.name ||
-                          m.itemId}
+                        {inventoryItems?.find((i: any) => i._id === m.itemId)?.name || m.itemId}
                       </td>
                       <td>{m.type}</td>
                       <td>{m.qty}</td>
@@ -467,7 +356,7 @@ export default function FinanceAdminPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(employees || []).map((e) => (
+                  {(employees || []).map((e: any) => (
                     <tr key={e._id} className="border-t">
                       <td className="py-2">{e.name}</td>
                       <td>{e.role}</td>
@@ -488,8 +377,8 @@ export default function FinanceAdminPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(payroll || []).map((p) => {
-                    const emp = employees?.find((e) => e._id === p.employeeId);
+                  {(payrolls || []).map((p: any) => {
+                    const emp = employees?.find((e: any) => e._id === p.employeeId);
                     return (
                       <tr key={p._id} className="border-t">
                         <td className="py-2">{p.date}</td>
@@ -510,11 +399,11 @@ export default function FinanceAdminPage() {
           <>
             <Section title="Add Product">
               <form onSubmit={addProduct} className="grid sm:grid-cols-6 gap-3">
-                <Input name="name" placeholder="Name" />
-                <Input name="slug" placeholder="Slug" />
+                <Input name="name" placeholder="Name" required />
+                <Input name="slug" placeholder="Slug" required />
                 <Input name="category" placeholder="Category" />
-                <Input type="number" name="price" placeholder="Price" />
-                <Input type="number" name="stock" placeholder="Stock" />
+                <Input type="number" name="price" placeholder="Price" required />
+                <Input type="number" name="stock" placeholder="Stock" required />
                 <label className="flex items-center gap-2">
                   <input type="checkbox" name="isAvailable" /> Available
                 </label>
@@ -534,7 +423,7 @@ export default function FinanceAdminPage() {
                   </tr>
                 </thead>
                 <tbody>
-                  {(products || []).map((p) => (
+                  {(products || []).map((p: any) => (
                     <tr key={p._id} className="border-t">
                       <td className="py-2">{p.name}</td>
                       <td>{p.category || "-"}</td>
@@ -542,10 +431,60 @@ export default function FinanceAdminPage() {
                       <td>{p.stock}</td>
                       <td>{p.isAvailable ? "Yes" : "No"}</td>
                       <td>
+                        <Button tone="danger" onClick={() => deleteProduct(p._id)}>
+                          Delete
+                        </Button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </Section>
+          </>
+        )}
+
+        {/* Promotions */}
+        {tab === "promotions" && (
+          <>
+            <Section title="Add Promotion">
+              <form onSubmit={addPromotion} className="grid sm:grid-cols-3 gap-3">
+                <Input name="title" placeholder="Title" required />
+                <Input name="desc" placeholder="Description" required />
+                <Input name="cta" placeholder="CTA" required />
+                <Input name="link" placeholder="Link (optional)" />
+                <Input name="image" placeholder="Image URL (optional)" />
+                <Button tone="success">Add</Button>
+              </form>
+            </Section>
+
+            <Section title="All Promotions">
+              <table className="w-full text-sm">
+                <thead className="bg-neutral-50">
+                  <tr>
+                    <th>Title</th>
+                    <th>Description</th>
+                    <th>CTA</th>
+                    <th>Active</th>
+                    <th>Actions</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {(promotions || []).map((p: any) => (
+                    <tr key={p._id} className="border-t">
+                      <td className="py-2">{p.title}</td>
+                      <td>{p.desc}</td>
+                      <td>{p.cta}</td>
+                      <td>
                         <Button
-                          tone="danger"
-                          onClick={() => deleteProduct(p._id)}
+                          tone={p.isActive ? "success" : "ghost"}
+                          onClick={() => togglePromotion(p._id, p.isActive)}
                         >
+                          {p.isActive ? "Active" : "Inactive"}
+                        </Button>
+                      </td>
+                      <td className="flex gap-2">
+                        <Button onClick={() => editPromotion(p._id)}>Edit</Button>
+                        <Button tone="danger" onClick={() => deletePromotion(p._id)}>
                           Delete
                         </Button>
                       </td>
@@ -560,14 +499,7 @@ export default function FinanceAdminPage() {
         {/* Reports */}
         {tab === "reports" && (
           <Section title="Reports">
-            <Button
-              onClick={() =>
-                window.open(
-                  `/api/finance/report?from=${from}&to=${to}`,
-                  "_blank"
-                )
-              }
-            >
+            <Button onClick={() => window.open(`/api/finance?action=report&from=${from}&to=${to}`, "_blank")}>
               Download Report
             </Button>
           </Section>

@@ -3,8 +3,8 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import axios from "axios";
-import ScrollStack, { ScrollStackItem } from "./reactbits/ScrollStack";
 import Image from "next/image";
+import SpotlightCard from "./reactbits/SpotlightCard";
 
 // Promotion type
 interface Promotion {
@@ -62,36 +62,46 @@ const Promotions = () => {
             No promotions available right now.
           </p>
         ) : (
-          <ScrollStack>
-            {promotions.map((p) => (
-              <ScrollStackItem
-                key={p._id}
-                itemClassName="bg-white shadow-lg p-10 text-center"
-              >
-                {/* Optional promo image */}
-                {p.image && (
-                  <div className="relative w-full h-40 mb-6">
-                    <Image
-                      src={p.image}
-                      alt={p.title}
-                      fill
-                      className="object-cover rounded-2xl"
-                    />
-                  </div>
-                )}
-
-                <h3 className="text-xl font-semibold">{p.title}</h3>
-                <p className="mt-3 text-neutral-600">{p.desc}</p>
-
-                <Link
-                  href={p.link || (p.title === "Loyalty Members" ? "/login" : "/products")}
-                  className="mt-6 inline-block text-amber-600 font-medium hover:underline"
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-6">
+            {promotions.map((p) => {
+              const href =
+                p.link || (p.title === "Loyalty Members" ? "/login" : "/products");
+              return (
+                <SpotlightCard
+                  key={p._id}
+                  className="custom-spotlight-card group"
+                  spotlightColor="rgba(0, 229, 255, 0.2)"
                 >
-                  {p.cta} →
-                </Link>
-              </ScrollStackItem>
-            ))}
-          </ScrollStack>
+                  {/* Optional promo image */}
+                  {p.image && (
+                    <div className="relative w-full h-40 mb-6 rounded-2xl overflow-hidden">
+                      <Image
+                        src={p.image}
+                        alt={p.title}
+                        fill
+                        className="object-cover transition-transform duration-300 group-hover:scale-[1.03]"
+                        sizes="(max-width: 768px) 100vw, (max-width: 1200px) 33vw, 33vw"
+                      />
+                    </div>
+                  )}
+
+                  <h3 className="text-lg sm:text-xl font-semibold text-white">
+                    {p.title}
+                  </h3>
+                  <p className="mt-3 text-sm sm:text-base text-neutral-300 leading-relaxed">
+                    {p.desc}
+                  </p>
+
+                  <Link
+                    href={href}
+                    className="mt-6 inline-flex items-center gap-1 text-amber-400 font-medium hover:underline"
+                  >
+                    {p.cta} <span aria-hidden>→</span>
+                  </Link>
+                </SpotlightCard>
+              );
+            })}
+          </div>
         )}
       </div>
     </section>
