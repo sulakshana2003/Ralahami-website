@@ -11,7 +11,6 @@ export interface IProduct extends Document {
   category?: string
   spicyLevel?: number    // 0-3
   isAvailable: boolean
-  stock?: number
   isSignatureToday: boolean
   tags?: string[]
   finalPrice?: number    // virtual
@@ -28,7 +27,6 @@ const ProductSchema = new Schema<IProduct>(
     category: { type: String, index: true },
     spicyLevel: { type: Number, min: 0, max: 3, default: 0 },
     isAvailable: { type: Boolean, default: true },
-    stock: { type: Number, default: 0, min: 0 },
     isSignatureToday: { type: Boolean, default: false, index: true },
     tags: { type: [String], default: [] },
   },

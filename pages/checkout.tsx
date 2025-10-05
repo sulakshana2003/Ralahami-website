@@ -1,16 +1,19 @@
+// pages/checkout.tsx
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
 import Image from "next/image";
+import Link from "next/link";
 import toast from "react-hot-toast";
 import { useCart } from "@/hooks/useCart";
-import { Elements, useStripe, useElements, CardElement } from "@stripe/react-stripe-js";
+import { Elements } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
-import Link from "next/link";  // Add this import
 
-const stripePromise = loadStripe("pk_test_51RwhjCE4mghBcU8D97gjwODEwddai88lzSnTOo1E9mvIn9wDRbtDv4nPS9rF2nhAJK0ZZ5pZcHmokKr1dtiBjZXO00huVbMGyD"); // Use your Stripe public key here
+const stripePromise = loadStripe(
+  "pk_test_51RwhjCE4mghBcU8D97gjwODEwddai88lzSnTOo1E9mvIn9wDRbtDv4nPS9rF2nhAJK0ZZ5pZcHmokKr1dtiBjZXO00huVbMGyD"
+);
 
 const FREE_DELIVERY_THRESHOLD = 5000; // LKR
-const DELIVERY_FEE = 350; // LKR (if below threshold)
+const DELIVERY_FEE = 350;             // LKR (if below threshold)
 
 type FormState = {
   fulfilment: "delivery" | "pickup";
@@ -43,17 +46,19 @@ const CheckoutPageContent = () => {
   const router = useRouter();
   const hydrated = useHasHydrated();
 
-  const items = useCart((s) => s.items);
+  // cart
+  const items    = useCart((s) => s.items);
   const subtotal = useCart((s) => s.subtotal());
   const clearCart = useCart((s) => s.clear);
 
+  // redirect if no items (after hydration)
   useEffect(() => {
     if (hydrated && (!items || items.length === 0)) {
       router.replace("/cart");
     }
   }, [hydrated, items, router]);
 
-  // Form state
+  // form
   const [form, setForm] = useState<FormState>({
     fulfilment: "delivery",
     firstName: "",
@@ -106,12 +111,15 @@ const CheckoutPageContent = () => {
   const [submitting, setSubmitting] = useState(false);
 
   const handleSubmit = async () => {
+    if (submitting) return; // double-click protection
+
     const errs = validate();
     if (errs.length) {
       errs.forEach((m) => toast.error(m));
       return;
     }
 
+    // compose the order snapshot from client
     const order = {
       items: items.map((i) => ({
         slug: i.slug,
@@ -156,10 +164,27 @@ const CheckoutPageContent = () => {
       setSubmitting(true);
 
       if (form.paymentMethod === "online") {
+        // 1) Create draft in DB for the webhook to update after Stripe payment success
+        const draftRes = await fetch("/api/orders/draft", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ order }),
+        });
+
+        if (!draftRes.ok) {
+          const { error } = await draftRes.json().catch(() => ({ error: "Failed to create draft order." }));
+          toast.error(error || "Failed to create draft order.");
+          setSubmitting(false);
+          return;
+        }
+
+        const { draftId } = await draftRes.json();
+
+        // 2) Create Stripe Checkout Session, passing draftId
         const res = await fetch("/api/checkout/create-session", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify(order),
+          body: JSON.stringify({ ...order, draftId }),
         });
 
         if (!res.ok) {
@@ -172,7 +197,7 @@ const CheckoutPageContent = () => {
         const data = await res.json();
         if (data?.url) {
           toast.success("Redirecting to secure payment…");
-          window.location.href = data.url;
+          window.location.href = data.url; // browser navigates to Stripe
           return;
         }
 
@@ -181,11 +206,28 @@ const CheckoutPageContent = () => {
         return;
       }
 
-      const fakeOrderId = `OD-${Date.now()}`;
+      // === Offline payments (COD / Card-on-Delivery): persist immediately ===
+      const localOrderId = `${form.paymentMethod.toUpperCase()}-${Date.now()}`;
+
+      await fetch("/api/orders/create", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          orderId: localOrderId,
+          revenue: total,
+          cost: Math.round(total * 0.6), // adjust if you track real COGS
+          note: JSON.stringify({
+            status: "pending",
+            method: form.paymentMethod,
+            order,
+          }),
+        }),
+      });
+
       clearCart();
       toast.success("Order placed! We’ll be in touch.");
-      router.replace(`/order/confirmation?orderId=${encodeURIComponent(fakeOrderId)}`);
-    } catch (err: any) {
+      router.replace(`/order/confirmation?orderId=${encodeURIComponent(localOrderId)}`);
+    } catch (err) {
       console.error(err);
       toast.error("Something went wrong. Please try again.");
       setSubmitting(false);
@@ -243,9 +285,7 @@ const CheckoutPageContent = () => {
                     <div>
                       <p className="text-sm font-medium capitalize">{opt}</p>
                       <p className="text-xs text-neutral-500">
-                        {opt === "delivery"
-                          ? "We’ll deliver your order to your address."
-                          : "Pick up at our Colombo location."}
+                        {opt === "delivery" ? "We’ll deliver your order to your address." : "Pick up at our Colombo location."}
                       </p>
                     </div>
                   </label>
@@ -256,9 +296,7 @@ const CheckoutPageContent = () => {
                   {subtotal >= FREE_DELIVERY_THRESHOLD ? (
                     <>🎉 Free delivery unlocked.</>
                   ) : (
-                    <>
-                      You’re <b>Rs. {remainingForFree.toLocaleString()}</b> away from free delivery.
-                    </>
+                    <>You’re <b>Rs. {remainingForFree.toLocaleString()}</b> away from free delivery.</>
                   )}
                 </p>
               ) : null}
@@ -366,9 +404,9 @@ const CheckoutPageContent = () => {
               <h2 className="text-lg font-semibold">Payment</h2>
               <div className="mt-4 grid gap-3 sm:grid-cols-3">
                 {([
-                  { key: "online", title: "Online (Card)", note: "Secure payment" },
-                  { key: "cod", title: "Cash on Delivery", note: "Pay with cash" },
-                  { key: "card_on_delivery", title: "Card on Delivery", note: "POS terminal" },
+                  { key: "online",            title: "Online (Card)",      note: "Secure payment" },
+                  { key: "cod",               title: "Cash on Delivery",    note: "Pay with cash" },
+                  { key: "card_on_delivery",  title: "Card on Delivery",    note: "POS terminal" },
                 ] as const).map((p) => (
                   <label
                     key={p.key}
@@ -399,14 +437,11 @@ const CheckoutPageContent = () => {
             <div className="overflow-hidden rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
               <h2 className="text-lg font-semibold">Order Summary</h2>
 
-              {/* Items */}
               <ul className="mt-4 divide-y">
                 {items.map((it) => (
                   <li key={it.slug} className="grid grid-cols-[64px_1fr_auto] items-center gap-3 py-3">
                     <div className="relative h-16 w-16 overflow-hidden rounded-lg bg-neutral-100">
-                      {it.image ? (
-                        <Image src={it.image} alt={it.name} fill className="object-cover" />
-                      ) : null}
+                      {it.image ? <Image src={it.image} alt={it.name} fill className="object-cover" /> : null}
                     </div>
                     <div className="min-w-0">
                       <p className="truncate text-sm font-medium">{it.name}</p>
@@ -421,7 +456,6 @@ const CheckoutPageContent = () => {
                 ))}
               </ul>
 
-              {/* Promo */}
               <div className="mt-4 rounded-xl bg-neutral-50 p-3">
                 <div className="flex items-center gap-2">
                   <input
@@ -442,7 +476,6 @@ const CheckoutPageContent = () => {
                 </div>
               </div>
 
-              {/* Totals */}
               <div className="mt-4 space-y-2 text-sm">
                 <div className="flex items-center justify-between text-neutral-700">
                   <span>Subtotal</span>
@@ -499,14 +532,15 @@ const CheckoutPageContent = () => {
               <li className="rounded-xl border border-neutral-200 bg-white p-3">🔒 Encrypted payments</li>
               <li className="rounded-xl border border-neutral-200 bg-white p-3">🚚 Same-day (Colombo)</li>
               <li className="rounded-xl border border-neutral-200 bg-white p-3">💳 Cash / Card on delivery</li>
-              <li className="rounded-xl border border-neutral-200 bg-white p-3">📞 Support: +94 11 234 5678</li>
+              <li className="rounded- xl border border-neutral-200 bg-white p-3">📞 Support: +94 11 234 5678</li>
             </ul>
           </aside>
         </div>
       </div>
     </div>
   );
-}
+};
+
 export default function CheckoutPage() {
   return (
     <Elements stripe={stripePromise}>
