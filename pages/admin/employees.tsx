@@ -87,35 +87,11 @@ function Modal({ isOpen, onClose, title, children }: { isOpen: boolean; onClose:
 }
 
 // ---------- types ----------
-type Employee = {
-  _id: string;
-  name: string;
-  role: string;
-  employeeId: string;
-  phone: string;
-  email: string;
-  address: string;
-  emergencyContactName: string;
-  emergencyContactPhone: string;
-  dateOfBirth: string;
-  department: string;
-  hireDate: string;
-  employmentStatus: "full-time" | "part-time" | "contract";
-  payType: "salary" | "hourly";
-  baseSalary: number;
-  isActive: boolean;
-};
-type Payroll = {
-  _id: string;
-  employeeId: string;
-  type: "salary" | "advance" | "bonus" | "deduction";
-  amount: number;
-  date: string;
-  note?: string;
-};
+type Employee = { _id: string; name: string; role: string; employeeId: string; phone: string; email: string; address: string; emergencyContactName: string; emergencyContactPhone: string; dateOfBirth: string; department: string; hireDate: string; employmentStatus: "full-time" | "part-time" | "contract"; payType: "salary" | "hourly"; baseSalary: number; isActive: boolean; };
+type Payroll = { _id: string; employeeId: string; type: "salary" | "advance" | "bonus" | "deduction"; amount: number; date: string; note?: string; };
 
 // ---------- Form Components ----------
-const formInitialState = { name: "", role: "", phone: "", email: "", address: "", emergencyContactName: "", emergencyContactPhone: "", dateOfBirth: "", department: "", hireDate: today(), employmentStatus: "full-time" as const, payType: "salary" as const, baseSalary: 0, };
+const formInitialState = { name: "", role: "", phone: "", email: "", address: "", emergencyContactName: "", emergencyContactPhone: "", dateOfBirth: "", department: "", hireDate: today(), employmentStatus: "full-time" as const, payType: "salary" as const, baseSalary: 0 };
 
 function AddEmployeeForm({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void; }) {
   const [formData, setFormData] = useState(formInitialState);
@@ -262,6 +238,17 @@ export default function EmployeeAdminPage() {
       alert(`Error deleting employee: ${error}`);
     }
   }
+  async function deletePayrollEntry(id: string) {
+    if (!confirm("Are you sure you want to delete this payroll entry? This action cannot be undone.")) return;
+    try {
+      const res = await fetch("/api/Employee/payroll", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }), });
+      if (!res.ok) throw new Error(await res.text());
+      mutatePayroll();
+      alert("Payroll entry deleted successfully.");
+    } catch (error) {
+      alert(`Error deleting payroll entry: ${error}`);
+    }
+  }
   async function seed() { /* ... seed logic ... */ }
 
   return (
@@ -303,7 +290,44 @@ export default function EmployeeAdminPage() {
           </div></div>
         </section>
 
-        {/* --- Modals --- */}
+        <section>
+          <div className="mb-3 text-lg font-semibold">Payroll History</div>
+          <div className="overflow-hidden rounded-xl border bg-white shadow"><div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-neutral-50 text-neutral-600">
+                <tr>
+                  <th className="p-3 text-left font-medium">Date</th>
+                  <th className="p-3 text-left font-medium">Employee Name</th>
+                  <th className="p-3 text-left font-medium">Department</th>
+                  <th className="p-3 text-left font-medium">Role</th>
+                  <th className="p-3 text-left font-medium">Type</th>
+                  <th className="p-3 text-right font-medium">Amount</th>
+                  <th className="p-3 text-left font-medium">Note</th>
+                  <th className="p-3 text-left font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(payroll || []).map((entry) => {
+                  const employee = (employees || []).find(emp => emp._id === entry.employeeId);
+                  return (
+                    <tr key={entry._id} className="border-t">
+                      <td className="p-3 text-gray-600">{entry.date}</td>
+                      <td className="p-3 font-medium text-gray-900">{employee ? employee.name : <span className="text-gray-400">N/A</span>}</td>
+                      <td className="p-3 text-gray-600">{employee ? employee.department : <span className="text-gray-400">N/A</span>}</td>
+                      <td className="p-3 text-gray-600">{employee ? employee.role : <span className="text-gray-400">N/A</span>}</td>
+                      <td className="p-3"><span className={`px-2 py-1 rounded-full text-xs capitalize ${ entry.type === 'salary' ? 'bg-blue-100 text-blue-800' : entry.type === 'bonus' ? 'bg-green-100 text-green-800' : entry.type === 'advance' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800' }`}>{entry.type}</span></td>
+                      <td className="p-3 text-gray-800 text-right font-mono">{fmt.format(entry.amount)}</td>
+                      <td className="p-3 text-gray-500">{entry.note || '-'}</td>
+                      <td className="p-3"><Button tone="danger" onClick={() => deletePayrollEntry(entry._id)} className="text-xs">Delete</Button></td>
+                    </tr>
+                  );
+                })}
+                {(payroll || []).length === 0 && ( <tr><td colSpan={8} className="p-6 text-center text-neutral-500">No payroll entries found for the selected period.</td></tr> )}
+              </tbody>
+            </table>
+          </div></div>
+        </section>
+
         <Modal isOpen={showAddForm} onClose={() => setShowAddForm(false)} title="Add New Employee"><AddEmployeeForm onClose={() => setShowAddForm(false)} onSuccess={() => mutateEmp()} /></Modal>
         {editingEmployee && <Modal isOpen={!!editingEmployee} onClose={() => setEditingEmployee(null)} title={`Edit ${editingEmployee.name}`}><EditEmployeeForm employee={editingEmployee} onClose={() => setEditingEmployee(null)} onSuccess={() => mutateEmp()} /></Modal>}
         <Modal isOpen={showPayrollForm} onClose={() => setShowPayrollForm(false)} title="Add Payroll Entry"><AddPayrollForm employees={employees || []} onClose={() => setShowPayrollForm(false)} onSuccess={() => mutatePayroll()} /></Modal>
