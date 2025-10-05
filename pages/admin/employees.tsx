@@ -6,6 +6,25 @@ import useSWR from "swr";
 import DashboardLayout from "../components/DashboardLayout";
 import AdminGuard from "../components/AdminGuard";
 import jsPDF from "jspdf";
+import { Bar } from "react-chartjs-2";
+import {
+  Chart as ChartJS,
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend,
+} from 'chart.js';
+
+ChartJS.register(
+  CategoryScale,
+  LinearScale,
+  BarElement,
+  Title,
+  Tooltip,
+  Legend
+);
 
 // ---------- utils ----------
 const fetcher = async (url: string) => {
@@ -119,6 +138,23 @@ function EditPayrollForm({ payrollEntry, employees, onClose, onSuccess }: { payr
   return ( <form onSubmit={handleUpdate} className="space-y-4"> <div><label className="block text-sm font-medium text-gray-700 mb-1">Date</label><Input type="date" required value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} /></div> <div><label className="block text-sm font-medium text-gray-700 mb-1">Employee</label><Select required value={formData.employeeId} onChange={(e) => setFormData({ ...formData, employeeId: e.target.value })}><option value="" disabled>-- Select an employee --</option>{employees.map((emp) => (<option key={emp._id} value={emp._id}>{emp.name} - {emp.role}</option>))}</Select></div> <div><label className="block text-sm font-medium text-gray-700 mb-1">Type</label><Select value={formData.type} onChange={(e) => setFormData({ ...formData, type: e.target.value as Payroll['type'] })}><option value="salary">Salary</option><option value="bonus">Bonus</option><option value="advance">Advance</option><option value="deduction">Deduction</option></Select></div> <div><label className="block text-sm font-medium text-gray-700 mb-1">Amount</label><Input type="number" min="0" step="0.01" required value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: Number(e.target.value) })} /></div> <div><label className="block text-sm font-medium text-gray-700 mb-1">Note (Optional)</label><Textarea value={formData.note || ''} onChange={(e) => setFormData({ ...formData, note: e.target.value })} /></div> <div className="flex justify-end gap-2 border-t pt-4 mt-4"><Button type="button" tone="ghost" onClick={onClose}>Cancel</Button><Button type="submit">Save Changes</Button></div> </form> );
 }
 
+function EmployeeCharts({ employees }: { employees: Employee[] }) {
+  const departmentData = useMemo(() => {
+    if (!employees) return { labels: [], data: [] };
+    const counts = employees.reduce((acc, emp) => { acc[emp.department] = (acc[emp.department] || 0) + 1; return acc; }, {} as Record<string, number>);
+    return { labels: Object.keys(counts), data: Object.values(counts) };
+  }, [employees]);
+
+  const chartData = {
+    labels: departmentData.labels,
+    datasets: [{ label: 'Number of Employees', data: departmentData.data, backgroundColor: 'rgba(75, 192, 192, 0.6)', borderColor: 'rgba(75, 192, 192, 1)', borderWidth: 1, }],
+  };
+
+  const chartOptions = { responsive: true, plugins: { legend: { position: 'top' as const, }, title: { display: true, text: 'Employee Distribution by Department', font: { size: 16 } }, }, scales: { y: { beginAtZero: true, ticks: { stepSize: 1 } } } };
+
+  return <Bar options={chartOptions} data={chartData} />;
+}
+
 // ---------- MAIN PAGE COMPONENT ----------
 export default function EmployeeAdminPage() {
   const { data: employees, mutate: mutateEmp } = useSWR<Employee[]>("/api/Employee/employees", fetcher);
@@ -131,31 +167,37 @@ export default function EmployeeAdminPage() {
   const [editingPayrollEntry, setEditingPayrollEntry] = useState<Payroll | null>(null);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
 
-  // --- Filter States ---
   const [searchTerm, setSearchTerm] = useState("");
   const [roleFilter, setRoleFilter] = useState("");
   const [departmentFilter, setDepartmentFilter] = useState("");
 
-  // --- Memoized lists for dynamic dropdown options ---
   const uniqueRoles = useMemo(() => { if (!employees) return []; return [...new Set(employees.map(emp => emp.role).sort())]; }, [employees]);
   const uniqueDepartments = useMemo(() => { if (!employees) return []; return [...new Set(employees.map(emp => emp.department).sort())]; }, [employees]);
 
-  // --- Memoized logic to filter employees ---
-  const filteredEmployees = useMemo(() => {
-    if (!employees) return [];
-    return employees.filter(emp => {
-      const nameMatch = emp.name.toLowerCase().includes(searchTerm.toLowerCase());
-      const roleMatch = roleFilter ? emp.role === roleFilter : true;
-      const departmentMatch = departmentFilter ? emp.department === departmentFilter : true;
-      return nameMatch && roleMatch && departmentMatch;
-    });
-  }, [employees, searchTerm, roleFilter, departmentFilter]);
-
+  const filteredEmployees = useMemo(() => { if (!employees) return []; return employees.filter(emp => { const nameMatch = emp.name.toLowerCase().includes(searchTerm.toLowerCase()); const roleMatch = roleFilter ? emp.role === roleFilter : true; const departmentMatch = departmentFilter ? emp.department === departmentFilter : true; return nameMatch && roleMatch && departmentMatch; }); }, [employees, searchTerm, roleFilter, departmentFilter]);
   const totals = useMemo(() => { if (!payroll) return { outflow: 0, salaries: 0, advances: 0, bonuses: 0, deductions: 0 }; const outflow = payroll.reduce((s, p) => s + (p.type === "deduction" ? -1 : 1) * p.amount, 0); const salaries = payroll.filter(p => p.type === "salary").reduce((s, p) => s + p.amount, 0); const advances = payroll.filter(p => p.type === "advance").reduce((s, p) => s + p.amount, 0); const bonuses = payroll.filter(p => p.type === "bonus").reduce((s, p) => s + p.amount, 0); const deductions = payroll.filter(p => p.type === "deduction").reduce((s, p) => s + p.amount, 0); return { outflow, salaries, advances, bonuses, deductions }; }, [payroll]);
 
-  async function generateReport() { /* ... generate report logic ... */ }
-  async function deleteEmployee(id: string) { if (!confirm("Are you sure you want to delete this employee?")) return; try { const res = await fetch("/api/Employee/employees", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }), }); if (!res.ok) throw new Error(await res.text()); mutateEmp(); alert("Employee deleted successfully."); } catch (error) { alert(`Error deleting employee: ${error}`); } }
-  async function deletePayrollEntry(id: string) { if (!confirm("Are you sure you want to delete this payroll entry?")) return; try { const res = await fetch("/api/Employee/payroll", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }), }); if (!res.ok) throw new Error(await res.text()); mutatePayroll(); alert("Payroll entry deleted successfully."); } catch (error) { alert(`Error deleting payroll entry: ${error}`); } }
+  async function generateReport() {
+    setIsGeneratingReport(true);
+    try {
+      const emps = filteredEmployees || [];
+      const pays = payroll || [];
+      const logo = await toDataUrl("/images/RalahamiLogo.png");
+      const now = new Date();
+      const title = "Employee & Payroll Summary Report";
+      const subtitle = `Date Range: ${from} to ${to} | Generated on ${now.toLocaleString()}`;
+      const stamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, "0")}-${String(now.getDate()).padStart(2, "0")}`;
+      const empRows = emps.map(e => `<tr><td>${e.name}</td><td>${e.department}</td><td>${e.role}</td><td>${e.isActive ? 'Active' : 'Inactive'}</td></tr>`).join("");
+      const payRows = pays.map(p => { const emp = (employees || []).find(e => e._id === p.employeeId); return `<tr><td>${p.date}</td><td>${emp?.name || 'N/A'}</td><td>${p.type}</td><td style="text-align:right">${fmt.format(p.amount)}</td></tr>`; }).join("");
+      const reportHtml = ` <!doctype html><html><head><meta charset="utf-8"/><title>${title}</title> <style> body { font-family: system-ui, sans-serif; color: #111827; } .header { display:flex; align-items:center; gap:16px; border-bottom: 1px solid #e5e7eb; padding-bottom: 16px; } .logo { height:48px; } .title { font-size:24px; font-weight:700; margin:0; } .subtitle { color:#6B7280; font-size: 12px; margin-top:4px; } .cards { display:grid; grid-template-columns: repeat(3, 1fr); gap:12px; margin:20px 0; } .card { border:1px solid #E5E7EB; border-radius:12px; padding:12px; } .label { font-size:12px; color:#6B7280; } .value { font-size:20px; font-weight:700; margin-top:4px; } h2 { font-size:18px; margin:24px 0 8px; border-bottom: 1px solid #e5e7eb; padding-bottom: 8px;} table { width:100%; border-collapse: collapse; } th, td { padding:8px 10px; font-size:12px; text-align: left; border-bottom: 1px solid #f3f4f6;} thead th { background:#F9FAFB; color:#374151; font-weight: 600; } </style></head><body> <div class="header">${logo ? `<img class="logo" src="${logo}" />` : ""}<div><h1 class="title">${title}</h1><div class="subtitle">${subtitle}</div></div></div> <div class="cards"> <div class="card"><div class="label">Filtered Employees</div><div class="value">${emps.length}</div></div> <div class="card"><div class="label">Total Outflow in Period</div><div class="value">${fmt.format(totals.outflow)}</div></div> <div class="card"><div class="label">Salaries in Period</div><div class="value">${fmt.format(totals.salaries)}</div></div> </div> <h2>Employee List (${searchTerm || roleFilter || departmentFilter ? 'Filtered' : 'All'})</h2> <table><thead><tr><th>Name</th><th>Department</th><th>Role</th><th>Status</th></tr></thead><tbody>${empRows || `<tr><td colspan="4">No employees match filters.</td></tr>`}</tbody></table> <h2 style="margin-top:24px">Payroll History (${from} → ${to})</h2> <table><thead><tr><th>Date</th><th>Employee</th><th>Type</th><th style="text-align:right">Amount</th></tr></thead><tbody>${payRows || `<tr><td colspan="4">No payroll entries in this period.</td></tr>`}</tbody></table> </body></html>`;
+      const doc = new jsPDF({ orientation: "portrait", unit: "mm", format: "a4" });
+      doc.setProperties({ title: `Report - ${stamp}` });
+      await doc.html(reportHtml, { callback: function (doc) { doc.save(`employee_report_${stamp}.pdf`); }, x: 15, y: 15, width: 180, windowWidth: 800, });
+    } catch (error) { console.error("Error generating PDF:", error); alert("Could not generate the report. Please check the console for errors."); } finally { setIsGeneratingReport(false); }
+  }
+  
+  async function deleteEmployee(id: string) { if (!confirm("Are you sure?")) return; try { const res = await fetch("/api/Employee/employees", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }), }); if (!res.ok) throw new Error(await res.text()); mutateEmp(); alert("Employee deleted."); } catch (error) { alert(`Error: ${error}`); } }
+  async function deletePayrollEntry(id: string) { if (!confirm("Are you sure?")) return; try { const res = await fetch("/api/Employee/payroll", { method: "DELETE", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }), }); if (!res.ok) throw new Error(await res.text()); mutatePayroll(); alert("Payroll entry deleted."); } catch (error) { alert(`Error: ${error}`); } }
   async function seed() { /* ... seed logic ... */ }
 
   return (
@@ -182,23 +224,28 @@ export default function EmployeeAdminPage() {
               <thead className="bg-neutral-50 text-neutral-600"><tr><th className="p-3 text-left font-medium">Name</th><th className="p-3 text-left font-medium">Role</th><th className="p-3 text-left font-medium">Department</th><th className="p-3 text-left font-medium">Status</th><th className="p-3 text-left font-medium">Actions</th></tr></thead>
               <tbody>
                 {filteredEmployees.map((emp) => ( <tr key={emp._id} className="border-t"> <td className="p-3 font-medium text-gray-900">{emp.name}</td> <td className="p-3 text-gray-600">{emp.role}</td> <td className="p-3 text-gray-600">{emp.department}</td> <td className="p-3"><span className={`px-2 py-1 rounded-full text-xs ${emp.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{emp.isActive ? 'Active' : 'Inactive'}</span></td> <td className="p-3 flex gap-2"><Button tone="ghost" onClick={() => setEditingEmployee(emp)} className="text-xs">Edit</Button><Button tone="danger" onClick={() => deleteEmployee(emp._id)} className="text-xs">Delete</Button></td> </tr> ))}
-                {filteredEmployees.length === 0 && ( <tr><td colSpan={5} className="p-6 text-center text-neutral-500">{employees && employees.length > 0 ? "No employees match the current filters." : "No employees found."}</td></tr> )}
+                {filteredEmployees.length === 0 && ( <tr><td colSpan={5} className="p-6 text-center text-neutral-500">{employees && employees.length > 0 ? "No employees match filters." : "No employees found."}</td></tr> )}
               </tbody>
             </table>
           </div></div>
         </section>
 
-        <section>
+        <section className="mb-8">
           <div className="mb-3 text-lg font-semibold">Payroll History</div>
           <div className="overflow-hidden rounded-xl border bg-white shadow"><div className="overflow-x-auto">
             <table className="w-full text-sm">
               <thead className="bg-neutral-50 text-neutral-600"><tr><th className="p-3 text-left font-medium">Date</th><th className="p-3 text-left font-medium">Employee Name</th><th className="p-3 text-left font-medium">Department</th><th className="p-3 text-left font-medium">Role</th><th className="p-3 text-left font-medium">Type</th><th className="p-3 text-right font-medium">Amount</th><th className="p-3 text-left font-medium">Note</th><th className="p-3 text-left font-medium">Actions</th></tr></thead>
               <tbody>
                 {(payroll || []).map((entry) => { const employee = (employees || []).find(emp => emp._id === entry.employeeId); return ( <tr key={entry._id} className="border-t"> <td className="p-3 text-gray-600">{entry.date}</td> <td className="p-3 font-medium text-gray-900">{employee ? employee.name : <span className="text-gray-400">N/A</span>}</td> <td className="p-3 text-gray-600">{employee ? employee.department : <span className="text-gray-400">N/A</span>}</td> <td className="p-3 text-gray-600">{employee ? employee.role : <span className="text-gray-400">N/A</span>}</td> <td className="p-3"><span className={`px-2 py-1 rounded-full text-xs capitalize ${ entry.type === 'salary' ? 'bg-blue-100 text-blue-800' : entry.type === 'bonus' ? 'bg-green-100 text-green-800' : entry.type === 'advance' ? 'bg-yellow-100 text-yellow-800' : 'bg-red-100 text-red-800' }`}>{entry.type}</span></td> <td className="p-3 text-gray-800 text-right font-mono">{fmt.format(entry.amount)}</td> <td className="p-3 text-gray-500">{entry.note || '-'}</td> <td className="p-3 flex gap-2"><Button tone="ghost" onClick={() => setEditingPayrollEntry(entry)} className="text-xs">Edit</Button><Button tone="danger" onClick={() => deletePayrollEntry(entry._id)} className="text-xs">Delete</Button></td> </tr> ); })}
-                {(payroll || []).length === 0 && ( <tr><td colSpan={8} className="p-6 text-center text-neutral-500">No payroll entries found for the selected period.</td></tr> )}
+                {(payroll || []).length === 0 && ( <tr><td colSpan={8} className="p-6 text-center text-neutral-500">No payroll entries for this period.</td></tr> )}
               </tbody>
             </table>
           </div></div>
+        </section>
+
+        <section>
+          <div className="mb-3 text-lg font-semibold">Employee Analytics</div>
+          <div className="bg-white rounded-xl shadow p-4 md:p-6"><EmployeeCharts employees={employees || []} /></div>
         </section>
 
         <Modal isOpen={showAddForm} onClose={() => setShowAddForm(false)} title="Add New Employee"><AddEmployeeForm onClose={() => setShowAddForm(false)} onSuccess={() => mutateEmp()} /></Modal>
