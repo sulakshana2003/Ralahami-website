@@ -1,4 +1,3 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { NextApiRequest, NextApiResponse } from "next";
 import { dbConnect } from "@/lib/db";
 import Employee from "@/models/Employee";
@@ -12,11 +11,38 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (req.method === "POST") {
-      const { name, role, baseSalary } = req.body || {};
-      if (!name || !role || baseSalary == null) return res.status(400).json({ message: "Missing fields" });
-      if (baseSalary < 0) return res.status(400).json({ message: "baseSalary must be ≥ 0" });
-      const e = await Employee.create({ name, role, baseSalary });
-      return res.status(201).json(e);
+      const body = req.body;
+
+      // Validate required fields (optional but good practice)
+      const requiredFields = [
+        "name",
+        "role",
+        "employeeId",
+        "phone",
+        "email",
+        "address",
+        "emergencyContactName",
+        "emergencyContactPhone",
+        "dateOfBirth",
+        "department",
+        "hireDate",
+        "employmentStatus",
+        "payType",
+        "baseSalary"
+      ];
+
+      for (const field of requiredFields) {
+        if (!body[field]) {
+          return res.status(400).json({ message: `${field} is required` });
+        }
+      }
+
+      try {
+        const e = await Employee.create(body);
+        return res.status(201).json(e);
+      } catch (err: any) {
+        return res.status(500).json({ message: err.message });
+      }
     }
 
     if (req.method === "PUT") {
@@ -28,10 +54,20 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     }
 
     if (req.method === "DELETE") {
-      const { id } = req.query;
-      if (!id || typeof id !== "string") return res.status(400).json({ message: "Missing id" });
-      await Employee.findByIdAndDelete(id);
-      return res.json({ ok: true });
+      // The fix is here: Reading from `req.body` instead of `req.query`
+      const { id } = req.body;
+
+      if (!id) {
+        return res.status(400).json({ message: "Missing employee id in request body" });
+      }
+
+      const deletedEmployee = await Employee.findByIdAndDelete(id);
+
+      if (!deletedEmployee) {
+        return res.status(404).json({ message: "Employee not found" });
+      }
+
+      return res.status(200).json({ ok: true, message: "Employee deleted successfully" });
     }
 
     res.setHeader("Allow", "GET,POST,PUT,DELETE");

@@ -1,35 +1,49 @@
-/* eslint-disable @typescript-eslint/no-explicit-any */
 import type { NextApiRequest, NextApiResponse } from "next";
 import { dbConnect } from "@/lib/db";
+import Payroll from "@/models/Payroll"; // Ensure you have a Payroll model
 import Employee from "@/models/Employee";
-import Payroll from "@/models/Payroll";
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   await dbConnect();
-  try {
-    if (req.method === "GET") {
-      const { from, to } = req.query as { from?: string; to?: string };
-      const q: any = {};
-      if (from && to) q.date = { $gte: from, $lte: to };
-      const rows = await Payroll.find(q).sort({ date: -1, createdAt: -1 }).lean();
-      return res.json(rows);
+
+  if (req.method === "GET") {
+    try {
+      const { from, to } = req.query;
+      const query = from && to ? { date: { $gte: from, $lte: to } } : {};
+      const payrollList = await Payroll.find(query).sort({ date: -1 }).lean();
+      return res.status(200).json(payrollList);
+    } catch (error: any) {
+      return res.status(500).json({ message: error.message });
     }
-
-    if (req.method === "POST") {
-      const { employeeId, type, amount, date, note } = req.body || {};
-      if (!employeeId || !type || !amount || !date) return res.status(400).json({ message: "Missing fields" });
-      if (amount <= 0) return res.status(400).json({ message: "amount must be > 0" });
-
-      const emp = await Employee.findById(employeeId);
-      if (!emp) return res.status(404).json({ message: "Employee not found" });
-
-      const p = await Payroll.create({ employeeId, type, amount, date, note });
-      return res.status(201).json(p);
-    }
-
-    res.setHeader("Allow", "GET,POST");
-    return res.status(405).end("Method Not Allowed");
-  } catch (e: any) {
-    return res.status(500).json({ message: e.message || "Server error" });
   }
+
+  if (req.method === "POST") {
+    try {
+      const { employeeId, type, amount, date, note } = req.body;
+
+      if (!employeeId || !type || !amount || !date) {
+        return res.status(400).json({ message: "Missing required fields: employeeId, type, amount, date." });
+      }
+
+      const employeeExists = await Employee.findById(employeeId);
+      if (!employeeExists) {
+        return res.status(404).json({ message: "Employee not found." });
+      }
+
+      const newPayrollEntry = await Payroll.create({
+        employeeId,
+        type,
+        amount,
+        date,
+        note,
+      });
+
+      return res.status(201).json(newPayrollEntry);
+    } catch (error: any) {
+      return res.status(500).json({ message: error.message });
+    }
+  }
+
+  res.setHeader("Allow", ["GET", "POST"]);
+  return res.status(405).end(`Method ${req.method} Not Allowed`);
 }
