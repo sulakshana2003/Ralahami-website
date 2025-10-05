@@ -115,11 +115,7 @@ type Payroll = {
 };
 
 // ---------- Form Components ----------
-const formInitialState = {
-  name: "", role: "", phone: "", email: "", address: "", emergencyContactName: "",
-  emergencyContactPhone: "", dateOfBirth: "", department: "", hireDate: today(),
-  employmentStatus: "full-time" as const, payType: "salary" as const, baseSalary: 0,
-};
+const formInitialState = { name: "", role: "", phone: "", email: "", address: "", emergencyContactName: "", emergencyContactPhone: "", dateOfBirth: "", department: "", hireDate: today(), employmentStatus: "full-time" as const, payType: "salary" as const, baseSalary: 0, };
 
 function AddEmployeeForm({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void; }) {
   const [formData, setFormData] = useState(formInitialState);
@@ -146,7 +142,7 @@ function AddEmployeeForm({ onClose, onSuccess }: { onClose: () => void; onSucces
         <div><label className="block text-sm font-medium text-gray-700 mb-1">Department</label><Input required value={formData.department} onChange={(e) => setFormData({ ...formData, department: e.target.value })} /></div>
         <div><label className="block text-sm font-medium text-gray-700 mb-1">Employment Status</label><Select value={formData.employmentStatus} onChange={(e) => setFormData({ ...formData, employmentStatus: e.target.value as any })}><option value="full-time">Full-time</option><option value="part-time">Part-time</option><option value="contract">Contract</option></Select></div>
         <div><label className="block text-sm font-medium text-gray-700 mb-1">Pay Type</label><Select value={formData.payType} onChange={(e) => setFormData({ ...formData, payType: e.target.value as any })}><option value="salary">Salary</option><option value="hourly">Hourly</option></Select></div>
-        <div><label className="block text-sm font-medium text-gray-700 mb-1">Base Salary</label><Input type="number" required value={formData.baseSalary} onChange={(e) => setFormData({ ...formData, baseSalary: Number(e.target.value) })} /></div>
+        <div><label className="block text-sm font-medium text-gray-700 mb-1">Base Salary</label><Input type="number" required min="0" value={formData.baseSalary} onChange={(e) => setFormData({ ...formData, baseSalary: Number(e.target.value) })} /></div>
         <div><label className="block text-sm font-medium text-gray-700 mb-1">Date of Birth</label><Input type="date" required value={formData.dateOfBirth} onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })} /></div>
         <div><label className="block text-sm font-medium text-gray-700 mb-1">Hire Date</label><Input type="date" required value={formData.hireDate} onChange={(e) => setFormData({ ...formData, hireDate: e.target.value })} /></div>
       </div>
@@ -191,7 +187,7 @@ function EditEmployeeForm({ employee, onClose, onSuccess }: { employee: Employee
         <div><label className="block text-sm font-medium text-gray-700 mb-1">Department</label><Input required value={formData.department} onChange={(e) => setFormData({ ...formData, department: e.target.value })} /></div>
         <div><label className="block text-sm font-medium text-gray-700 mb-1">Employment Status</label><Select value={formData.employmentStatus} onChange={(e) => setFormData({ ...formData, employmentStatus: e.target.value as any })}><option value="full-time">Full-time</option><option value="part-time">Part-time</option><option value="contract">Contract</option></Select></div>
         <div><label className="block text-sm font-medium text-gray-700 mb-1">Pay Type</label><Select value={formData.payType} onChange={(e) => setFormData({ ...formData, payType: e.target.value as any })}><option value="salary">Salary</option><option value="hourly">Hourly</option></Select></div>
-        <div><label className="block text-sm font-medium text-gray-700 mb-1">Base Salary</label><Input type="number" required value={formData.baseSalary} onChange={(e) => setFormData({ ...formData, baseSalary: Number(e.target.value) })} /></div>
+        <div><label className="block text-sm font-medium text-gray-700 mb-1">Base Salary</label><Input type="number" required min="0" value={formData.baseSalary} onChange={(e) => setFormData({ ...formData, baseSalary: Number(e.target.value) })} /></div>
         <div><label className="block text-sm font-medium text-gray-700 mb-1">Date of Birth</label><Input type="date" required value={formData.dateOfBirth} onChange={(e) => setFormData({ ...formData, dateOfBirth: e.target.value })} /></div>
         <div><label className="block text-sm font-medium text-gray-700 mb-1">Hire Date</label><Input type="date" required value={formData.hireDate} onChange={(e) => setFormData({ ...formData, hireDate: e.target.value })} /></div>
       </div>
@@ -205,16 +201,44 @@ function EditEmployeeForm({ employee, onClose, onSuccess }: { employee: Employee
   );
 }
 
+function AddPayrollForm({ employees, onClose, onSuccess }: { employees: Employee[]; onClose: () => void; onSuccess: () => void; }) {
+  const [formData, setFormData] = useState({ employeeId: "", type: "salary" as Payroll['type'], amount: 0, date: today(), note: "" });
+  async function handleSubmit(e: React.FormEvent) {
+    e.preventDefault();
+    if (!formData.employeeId) { alert("Please select an employee."); return; }
+    if (formData.amount <= 0) { alert("Amount must be greater than zero."); return; }
+    try {
+      const res = await fetch("/api/Employee/payroll", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(formData) });
+      if (!res.ok) throw new Error(await res.text());
+      alert("Payroll entry recorded successfully!");
+      onSuccess();
+      onClose();
+    } catch (error) {
+      alert(`Error recording payroll: ${error}`);
+    }
+  }
+  return (
+    <form onSubmit={handleSubmit} className="space-y-4">
+      <div><label className="block text-sm font-medium text-gray-700 mb-1">Date</label><Input type="date" required value={formData.date} onChange={(e) => setFormData({ ...formData, date: e.target.value })} /></div>
+      <div><label className="block text-sm font-medium text-gray-700 mb-1">Employee</label><Select required value={formData.employeeId} onChange={(e) => setFormData({ ...formData, employeeId: e.target.value })}><option value="" disabled>-- Select an employee --</option>{employees.map((emp) => (<option key={emp._id} value={emp._id}>{emp.name} - {emp.role}</option>))}</Select></div>
+      <div><label className="block text-sm font-medium text-gray-700 mb-1">Type</label><Select value={formData.type} onChange={(e) => setFormData({ ...formData, type: e.target.value as Payroll['type'] })}><option value="salary">Salary</option><option value="bonus">Bonus</option><option value="advance">Advance</option><option value="deduction">Deduction</option></Select></div>
+      <div><label className="block text-sm font-medium text-gray-700 mb-1">Amount</label><Input type="number" min="0" step="0.01" required placeholder="Enter amount" value={formData.amount} onChange={(e) => setFormData({ ...formData, amount: Number(e.target.value) })} /></div>
+      <div><label className="block text-sm font-medium text-gray-700 mb-1">Note (Optional)</label><Textarea placeholder="Add any remarks here..." value={formData.note} onChange={(e) => setFormData({ ...formData, note: e.target.value })} /></div>
+      <div className="flex justify-end gap-2 border-t pt-4 mt-4"><Button type="button" tone="ghost" onClick={onClose}>Cancel</Button><Button type="submit">Record</Button></div>
+    </form>
+  );
+}
+
 // ---------- MAIN PAGE COMPONENT ----------
 export default function EmployeeAdminPage() {
   const { data: employees, mutate: mutateEmp } = useSWR<Employee[]>("/api/Employee/employees", fetcher);
   const [from, setFrom] = useState(shift(-30));
   const [to, setTo] = useState(today());
+  const { data: payroll, mutate: mutatePayroll } = useSWR<Payroll[]>(() => `/api/Employee/payroll?from=${from}&to=${to}`, fetcher);
   const [showAddForm, setShowAddForm] = useState(false);
   const [showPayrollForm, setShowPayrollForm] = useState(false);
   const [editingEmployee, setEditingEmployee] = useState<Employee | null>(null);
   const [isGeneratingReport, setIsGeneratingReport] = useState(false);
-  const { data: payroll } = useSWR<Payroll[]>(() => `/api/Employee/payroll?from=${from}&to=${to}`, fetcher);
 
   const totals = useMemo(() => {
     if (!payroll) return { outflow: 0, salaries: 0, advances: 0, bonuses: 0, deductions: 0 };
@@ -244,8 +268,8 @@ export default function EmployeeAdminPage() {
     <AdminGuard>
       <DashboardLayout>
         <div className="mb-6 flex items-center justify-between">
-          <div><h1 className="text-2xl font-bold">Employee Management</h1><p className="text-sm text-neutral-500">Manage employees & payroll transactions</p></div>
-          <div className="flex gap-2"><Button tone="ghost" onClick={seed}>Seed Dummy DB</Button><Button onClick={() => setShowAddForm(true)}>Add Employee</Button><Button tone="ghost" onClick={() => setShowPayrollForm(true)}>Add Payroll</Button><Button onClick={generateReport} disabled={isGeneratingReport}>{isGeneratingReport ? 'Generating...' : 'Generate Report'}</Button></div>
+          <div><h1 className="text-2xl font-bold">Employee Management</h1><p className="text-sm text-neutral-500">Manage employees & payroll</p></div>
+          <div className="flex gap-2"><Button tone="ghost" onClick={seed}>Seed</Button><Button onClick={() => setShowAddForm(true)}>Add Employee</Button><Button tone="ghost" onClick={() => setShowPayrollForm(true)}>Add Payroll</Button><Button onClick={generateReport} disabled={isGeneratingReport}>{isGeneratingReport ? 'Generating...' : 'Report'}</Button></div>
         </div>
         
         <div className="bg-white rounded-xl shadow p-4 mb-8 flex flex-wrap gap-3 items-center"><label className="text-sm text-neutral-600">From</label><Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-[160px]" /><label className="text-sm text-neutral-600">To</label><Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-[160px]" /></div>
@@ -253,36 +277,37 @@ export default function EmployeeAdminPage() {
 
         <section className="mb-8">
           <div className="mb-3 text-lg font-semibold">Employees</div>
-          <div className="overflow-hidden rounded-xl border bg-white shadow">
-            <div className="overflow-x-auto">
-              <table className="w-full text-sm">
-                <thead className="bg-neutral-50 text-neutral-600">
-                  <tr>
-                    <th className="p-3 text-left font-medium">Name</th>
-                    <th className="p-3 text-left font-medium">Role</th>
-                    <th className="p-3 text-left font-medium">Department</th>
-                    <th className="p-3 text-left font-medium">Status</th>
-                    <th className="p-3 text-left font-medium">Actions</th>
+          <div className="overflow-hidden rounded-xl border bg-white shadow"><div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead className="bg-neutral-50 text-neutral-600">
+                <tr>
+                  <th className="p-3 text-left font-medium">Name</th>
+                  <th className="p-3 text-left font-medium">Role</th>
+                  <th className="p-3 text-left font-medium">Department</th>
+                  <th className="p-3 text-left font-medium">Status</th>
+                  <th className="p-3 text-left font-medium">Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {(employees || []).map((emp) => (
+                  <tr key={emp._id} className="border-t">
+                    <td className="p-3 font-medium text-gray-900">{emp.name}</td>
+                    <td className="p-3 text-gray-600">{emp.role}</td>
+                    <td className="p-3 text-gray-600">{emp.department}</td>
+                    <td className="p-3"><span className={`px-2 py-1 rounded-full text-xs ${emp.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{emp.isActive ? 'Active' : 'Inactive'}</span></td>
+                    <td className="p-3 flex gap-2"><Button tone="ghost" onClick={() => setEditingEmployee(emp)} className="text-xs">Edit</Button><Button tone="danger" onClick={() => deleteEmployee(emp._id)} className="text-xs">Delete</Button></td>
                   </tr>
-                </thead>
-                <tbody>
-                  {(employees || []).map((emp) => (
-                    <tr key={emp._id} className="border-t">
-                      <td className="p-3 font-medium text-gray-900">{emp.name}</td>
-                      <td className="p-3 text-gray-600">{emp.role}</td>
-                      <td className="p-3 text-gray-600">{emp.department}</td>
-                      <td className="p-3"><span className={`px-2 py-1 rounded-full text-xs ${emp.isActive ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{emp.isActive ? 'Active' : 'Inactive'}</span></td>
-                      <td className="p-3 flex gap-2"><Button tone="ghost" onClick={() => setEditingEmployee(emp)} className="text-xs">Edit</Button><Button tone="danger" onClick={() => deleteEmployee(emp._id)} className="text-xs">Delete</Button></td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          </div>
+                ))}
+              </tbody>
+            </table>
+          </div></div>
         </section>
 
+        {/* --- Modals --- */}
         <Modal isOpen={showAddForm} onClose={() => setShowAddForm(false)} title="Add New Employee"><AddEmployeeForm onClose={() => setShowAddForm(false)} onSuccess={() => mutateEmp()} /></Modal>
-        {editingEmployee && <Modal isOpen={!!editingEmployee} onClose={() => setEditingEmployee(null)} title={`Edit Details for ${editingEmployee.name}`}><EditEmployeeForm employee={editingEmployee} onClose={() => setEditingEmployee(null)} onSuccess={() => mutateEmp()} /></Modal>}
+        {editingEmployee && <Modal isOpen={!!editingEmployee} onClose={() => setEditingEmployee(null)} title={`Edit ${editingEmployee.name}`}><EditEmployeeForm employee={editingEmployee} onClose={() => setEditingEmployee(null)} onSuccess={() => mutateEmp()} /></Modal>}
+        <Modal isOpen={showPayrollForm} onClose={() => setShowPayrollForm(false)} title="Add Payroll Entry"><AddPayrollForm employees={employees || []} onClose={() => setShowPayrollForm(false)} onSuccess={() => mutatePayroll()} /></Modal>
+
       </DashboardLayout>
     </AdminGuard>
   );
