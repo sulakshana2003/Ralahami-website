@@ -1,9 +1,8 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import type { NextApiRequest, NextApiResponse } from "next";
-import { dbConnect } from "@/lib/db";  // ✅ use your shared connection
+import { dbConnect } from "@/lib/db";
 import mongoose from "mongoose";
 
-// ----------- Promotion Model -----------
 const PromotionSchema = new mongoose.Schema(
   {
     title: { type: String, required: true, trim: true },
@@ -18,43 +17,51 @@ const PromotionSchema = new mongoose.Schema(
   { timestamps: true }
 );
 
-// ✅ Reuse model if already compiled
 const Promotion =
   mongoose.models.Promotion || mongoose.model("Promotion", PromotionSchema);
 
-// ----------- API Handler -----------
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  await dbConnect();
+
   try {
-    await dbConnect(); // ✅ use your lib/db.ts
-
-    switch (req.method) {
-      case "GET":
-        try {
-          const promotions = await Promotion.find({ isActive: true }).sort({ createdAt: -1 });
-          res.status(200).json(promotions);
-        } catch (err: any) {
-          console.error("❌ Error fetching promotions:", err);
-          res.status(500).json({ error: "Failed to fetch promotions", details: err.message });
-        }
-        break;
-
-      case "POST":
-        try {
-          const promotion = new Promotion(req.body);
-          await promotion.save();
-          res.status(201).json(promotion);
-        } catch (err: any) {
-          console.error("❌ Error creating promotion:", err);
-          res.status(400).json({ error: "Failed to create promotion", details: err.message });
-        }
-        break;
-
-      default:
-        res.setHeader("Allow", ["GET", "POST"]);
-        res.status(405).end(`Method ${req.method} Not Allowed`);
+    if (req.method === "GET") {
+      const { includeInactive } = req.query;
+      const query = includeInactive === "1" ? {} : { isActive: true };
+      const promotions = await Promotion.find(query).sort({ createdAt: -1 });
+      return res.status(200).json(promotions);
     }
+
+    if (req.method === "POST") {
+      const newPromotion = await Promotion.create(req.body);
+      return res.status(201).json(newPromotion);
+    }
+
+    if (req.method === "PUT") {
+      const { id } = req.query;
+      if (!id || typeof id !== "string")
+        return res.status(400).json({ message: "Missing promotion ID" });
+
+      const updated = await Promotion.findByIdAndUpdate(id, req.body, { new: true });
+      if (!updated) return res.status(404).json({ message: "Promotion not found" });
+
+      return res.status(200).json(updated);
+    }
+
+    if (req.method === "DELETE") {
+      const { id } = req.query;
+      if (!id || typeof id !== "string")
+        return res.status(400).json({ message: "Missing promotion ID" });
+
+      const deleted = await Promotion.findByIdAndDelete(id);
+      if (!deleted) return res.status(404).json({ message: "Promotion not found" });
+
+      return res.status(200).json({ ok: true });
+    }
+
+    res.setHeader("Allow", "GET, POST, PUT, DELETE");
+    return res.status(405).end(`Method ${req.method} Not Allowed`);
   } catch (err: any) {
-    console.error("❌ Database connection failed:", err);
-    res.status(500).json({ error: "Database connection failed", details: err.message });
+    console.error("❌ API Error:", err);
+    res.status(500).json({ message: err.message || "Server error" });
   }
 }
