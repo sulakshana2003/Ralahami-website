@@ -8,6 +8,7 @@ import {
   FiCalendar,
   FiHome,
   FiLogOut,
+  FiShoppingCart,
 } from "react-icons/fi";
 import { TfiUser } from "react-icons/tfi";
 import Link from "next/link";
@@ -20,6 +21,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
   const navItems = [
     { label: "Dashboard", href: "/admin/dashboard", icon: <FiHome /> },
     { label: "Products", href: "/admin/products", icon: <FiBox /> },
+    { label: "Orders", href: "/admin/orders", icon: <FiShoppingCart /> },
     { label: "Users", href: "/admin/users", icon: <TfiUser /> },
     {
       label: "Reservations",
@@ -29,6 +31,7 @@ export default function DashboardLayout({ children }: { children: ReactNode }) {
     { label: "Employees", href: "/admin/employees", icon: <FiUsers /> },
     { label: "Inventory", href: "/admin/inventory", icon: <FiClipboard /> },
     { label: "Finance", href: "/admin/finance", icon: <FiTrendingUp /> },
+    
   ];
 
   return (
