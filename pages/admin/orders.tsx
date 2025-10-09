@@ -28,11 +28,6 @@ import {
 import jsPDF from "jspdf";
 import autoTable from "jspdf-autotable";
 
-/**
- * ℹ️ Add this page to your left admin menu:
- *   In `DashboardLayout`'s side menu, include: { href: "/admin/orders", label: "Orders" }
- */
-
 /* ============================== Types ============================== */
 type DbOrder = {
   _id: string;
@@ -75,7 +70,7 @@ type CombinedRow = {
   method: string;
   orderId: string;
   date: string; // YYYY-MM-DD
-  createdAt: number; // ms
+  createdAt: number; // ms epoch
   revenue: number;
   cost: number;
   customer?: string;
@@ -107,10 +102,9 @@ function downloadCSV(filename: string, rows: any[]) {
   const escape = (v: any) => {
     const s = String(v ?? "");
     return s.includes(",") || s.includes("\n") || s.includes('"')
-      ? `"${s.replace(/"/g, '""')}"`
-      : s;
+      ? `"${s.replace(/"/g, '""')}"` : s;
   };
-  const csv = [cols.join(","), ...rows.map((r) => cols.map((c) => escape(r[c])).join(","))].join("\n");
+  const csv = [cols.join(","), ...rows.map(r => cols.map(c => escape(r[c])).join(","))].join("\n");
   const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
@@ -120,44 +114,65 @@ function downloadCSV(filename: string, rows: any[]) {
   URL.revokeObjectURL(url);
 }
 
-/** Convert a Recharts SVG into PNG (avoids html2canvas + "lab()" CSS errors) */
-async function svgToPng(
-  svgEl: SVGSVGElement,
-  targetWidthPx: number
-): Promise<{ dataUrl: string; width: number; height: number }> {
-  const serializer = new XMLSerializer();
-  let src = serializer.serializeToString(svgEl);
+/** Convert a single chart's main <svg> to PNG.
+ *  We only export the first, sufficiently large <svg> inside the chart card
+ *  to avoid legend-icon SVGs becoming huge donuts in the PDF.
+ */
+async function chartCardToPng(cardEl: HTMLElement, targetW = 1400) {
+  const svgs = Array.from(cardEl.querySelectorAll("svg")) as SVGSVGElement[];
+  // find the first "big" svg (width or height > 220px on screen)
+  const svg = svgs.find(s => {
+    const bb = s.getBoundingClientRect();
+    return bb.width > 220 && bb.height > 160;
+  });
+  if (!svg) return null;
 
+  const serializer = new XMLSerializer();
+  let src = serializer.serializeToString(svg);
   if (!src.includes("http://www.w3.org/2000/svg")) {
     src = src.replace("<svg", '<svg xmlns="http://www.w3.org/2000/svg"');
   }
-  const svg64 =
-    typeof window.btoa === "function"
-      ? window.btoa(unescape(encodeURIComponent(src)))
-      : Buffer.from(src, "utf-8").toString("base64");
+  const svg64 = typeof window.btoa === "function"
+    ? window.btoa(unescape(encodeURIComponent(src)))
+    : Buffer.from(src, "utf-8").toString("base64");
 
   const image64 = "data:image/svg+xml;base64," + svg64;
   const img = new Image();
   img.crossOrigin = "anonymous";
 
-  const loaded: Promise<{ dataUrl: string; width: number; height: number }> = new Promise(
+  const loaded: Promise<{ dataUrl: string; w: number; h: number }> = new Promise(
     (resolve, reject) => {
       img.onload = () => {
         const ratio = img.height / img.width || 1;
         const canvas = document.createElement("canvas");
-        canvas.width = targetWidthPx;
-        canvas.height = Math.max(1, Math.round(targetWidthPx * ratio));
+        canvas.width = targetW;
+        canvas.height = Math.max(1, Math.round(targetW * ratio));
         const ctx = canvas.getContext("2d");
         if (!ctx) return reject(new Error("Canvas 2D context not available"));
         ctx.drawImage(img, 0, 0, canvas.width, canvas.height);
-        resolve({ dataUrl: canvas.toDataURL("image/png"), width: canvas.width, height: canvas.height });
+        resolve({ dataUrl: canvas.toDataURL("image/png"), w: canvas.width, h: canvas.height });
       };
       img.onerror = reject;
     }
   );
-
   img.src = image64;
   return loaded;
+}
+
+/** Read a local asset to dataURL (for logo) */
+async function toDataURL(url: string): Promise<string | null> {
+  try {
+    const res = await fetch(url);
+    const blob = await res.blob();
+    return await new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.onerror = () => resolve(null);
+      reader.readAsDataURL(blob);
+    });
+  } catch {
+    return null;
+  }
 }
 
 /* ============================== Page ============================== */
@@ -206,10 +221,7 @@ export default function AdminOrdersPage() {
       setLoading(false);
     }
   }
-  useEffect(() => {
-    fetchAll();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [from, to]);
+  useEffect(() => { fetchAll(); /* eslint-disable-next-line */ }, [from, to]);
 
   /* --------- normalize "combined" view --------- */
   const combinedRows: CombinedRow[] = useMemo(() => {
@@ -306,8 +318,7 @@ export default function AdminOrdersPage() {
       row.cost += Number(r.cost) || 0;
       row.orders += 1;
     }
-    const arr = Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
-    return arr;
+    return Array.from(map.values()).sort((a, b) => a.date.localeCompare(b.date));
   }, [viewRows]);
 
   const cumulativeRevenue = useMemo(() => {
@@ -361,9 +372,10 @@ export default function AdminOrdersPage() {
     return arr;
   }, [viewRows]);
 
-  const topOrders = useMemo(() => {
-    return [...viewRows].sort((a, b) => b.revenue - a.revenue).slice(0, 10);
-  }, [viewRows]);
+  const topOrders = useMemo(
+    () => [...viewRows].sort((a, b) => b.revenue - a.revenue).slice(0, 10),
+    [viewRows]
+  );
 
   const topCustomers = useMemo(() => {
     const map = new Map<string, { customer: string; revenue: number; orders: number }>();
@@ -380,73 +392,223 @@ export default function AdminOrdersPage() {
 
   const COLORS = ["#6366F1", "#10B981", "#F59E0B", "#EF4444", "#0EA5E9", "#8B5CF6", "#14B8A6", "#22C55E"];
 
-  /* Refs for PDF chart capture (SVG) */
-  const chartsRef = useRef<HTMLDivElement>(null);
+  /* Refs to each chart card (we export only these, not every svg) */
+  const chartRefs = {
+    daily: useRef<HTMLDivElement>(null),
+    cumulative: useRef<HTMLDivElement>(null),
+    revCost: useRef<HTMLDivElement>(null),
+    method: useRef<HTMLDivElement>(null),
+    source: useRef<HTMLDivElement>(null),
+    weekday: useRef<HTMLDivElement>(null),
+    hour: useRef<HTMLDivElement>(null),
+  };
 
   /* ============================== PDF Report ============================== */
   async function generatePdf() {
     const doc = new jsPDF({ unit: "mm", format: "a4" });
-    const pageWidth = doc.internal.pageSize.getWidth();
-    const pageHeight = doc.internal.pageSize.getHeight();
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
     const margin = 12;
 
-    // Title + range
-    doc.setFontSize(16);
-    doc.text("Orders Report", margin, 18);
-    doc.setFontSize(10);
-    doc.text(`Range: ${from} → ${to} • Tab: ${tab.toUpperCase()}`, margin, 26);
-    doc.text(`Generated: ${new Date().toLocaleString()}`, margin, 31);
+    // 1) Header with logo & business info
+    const logoData = await toDataURL("/images/RalahamiLogo.png");
+    let cursorY = margin;
 
-    // KPIs
-    doc.setFontSize(11);
-    doc.text(`Revenue: ${formatMoney(totalRevenueCurrentView)}`, margin, 40);
-    doc.text(`Orders: ${ordersCount}`, margin + 70, 40);
-    doc.text(`Cost: ${formatMoney(totalCostCurrentView)}`, margin, 46);
-    doc.text(`Margin: ${formatMoney(margin)} (${marginPct.toFixed(1)}%)`, margin + 70, 46);
-    doc.text(`Average Order Value: ${formatMoney(avgOrderValue)}`, margin, 52);
-
-    // Export each chart SVG within chartsRef as PNG
-    let y = 60;
-    const svgs = (chartsRef.current?.querySelectorAll("svg") || []) as NodeListOf<SVGSVGElement>;
-    for (const svg of Array.from(svgs)) {
-      const { dataUrl, width, height } = await svgToPng(svg, 1400); // render hi-res
-      const imgW = pageWidth - margin * 2;
-      const imgH = (height * imgW) / width;
-
-      if (y + imgH > pageHeight - 20) {
-        doc.addPage();
-        y = 20;
-      }
-      doc.addImage(dataUrl, "PNG", margin, y, imgW, imgH, undefined, "FAST");
-      y += imgH + 8;
+    if (logoData) {
+      // place logo 18mm high keeping aspect
+      const img = new Image();
+      img.src = logoData;
+      await img.decode?.().catch(() => {});
+      const logoH = 18;
+      const ratio = (img.width || 1) / (img.height || 1);
+      const logoW = Math.min(40, logoH * ratio);
+      doc.addImage(logoData, "PNG", margin, cursorY, logoW, logoH, undefined, "FAST");
+      doc.setFontSize(16);
+      doc.text("Ralahami Restaurant", margin + logoW + 4, cursorY + 6);
+      doc.setFontSize(10);
+      doc.text("No. 123, Colombo Road, Sri Lanka", margin + logoW + 4, cursorY + 12);
+      doc.text("Phone: +94 77 123 4567 • https://ralahami.lk", margin + logoW + 4, cursorY + 17);
+      cursorY += logoH + 4;
+    } else {
+      doc.setFontSize(16);
+      doc.text("Ralahami Restaurant", margin, cursorY + 6);
+      doc.setFontSize(10);
+      doc.text("No. 123, Colombo Road, Sri Lanka • +94 77 123 4567 • https://ralahami.lk", margin, cursorY + 12);
+      cursorY += 18;
     }
 
-    // Orders table (compact)
-    doc.addPage();
-    doc.setFontSize(12);
-    doc.text("Orders (compact view)", margin, 16);
+    // title line
+    doc.setDrawColor(210);
+    doc.line(margin, cursorY, pageW - margin, cursorY);
+    cursorY += 6;
+
+    doc.setFontSize(14);
+    doc.text("Orders Analytics Report", margin, cursorY);
+    doc.setFontSize(9);
+    doc.text(`Range: ${from} → ${to} • View: ${tab.toUpperCase()} • Generated: ${new Date().toLocaleString()}`, margin, cursorY + 5);
+    cursorY += 12;
+
+    // 2) KPIs table
     autoTable(doc, {
-      startY: 20,
+      startY: cursorY,
+      head: [["Metric", "Value"]],
+      body: [
+        ["Total Revenue", formatMoney(totalRevenueCurrentView)],
+        ["Total Orders", String(ordersCount)],
+        ["Total Cost", formatMoney(totalCostCurrentView)],
+        ["Margin", `${formatMoney(margin)} (${marginPct.toFixed(1)}%)`],
+        ["Average Order Value", formatMoney(avgOrderValue)],
+      ],
+      theme: "grid",
+      styles: { fontSize: 9, cellPadding: 2 },
+      headStyles: { fillColor: [67, 56, 202] },
+      columnStyles: {
+        0: { cellWidth: 60 },
+        1: { cellWidth: pageW - margin * 2 - 60 },
+      },
+    });
+    // @ts-ignore
+    cursorY = (doc as any).lastAutoTable.finalY + 6;
+
+    // 3) Small summary tables: by source + by method
+    autoTable(doc, {
+      startY: cursorY,
+      head: [["Source", "Orders", "Revenue"]],
+      body: bySource.map((s) => [s.name, String(s.orders), formatMoney(s.revenue)]),
+      styles: { fontSize: 9, cellPadding: 2 },
+      headStyles: { fillColor: [99, 102, 241] },
+      theme: "grid",
+      tableWidth: (pageW - margin * 2) / 2 - 2,
+      margin: { left: margin, right: undefined },
+    });
+    // @ts-ignore
+    let leftTableBottom = (doc as any).lastAutoTable.finalY;
+
+    autoTable(doc, {
+      startY: cursorY,
+      head: [["Method", "Orders", "Revenue"]],
+      body: byMethod.map((m) => [m.name, String(m.orders), formatMoney(m.value)]),
+      styles: { fontSize: 9, cellPadding: 2 },
+      headStyles: { fillColor: [34, 197, 94] },
+      theme: "grid",
+      tableWidth: (pageW - margin * 2) / 2 - 2,
+      margin: { left: margin + (pageW - margin * 2) / 2 + 2 },
+    });
+    // @ts-ignore
+    let rightTableBottom = (doc as any).lastAutoTable.finalY;
+    cursorY = Math.max(leftTableBottom, rightTableBottom) + 8;
+
+    // 4) Charts — export only the main SVG of each chart card
+    const chartBlocks: { ref: React.RefObject<HTMLDivElement>; title: string }[] = [
+      { ref: chartRefs.daily,      title: "Daily Revenue & Orders" },
+      { ref: chartRefs.cumulative, title: "Cumulative Revenue" },
+      { ref: chartRefs.revCost,    title: "Revenue vs Cost (Daily)" },
+      { ref: chartRefs.method,     title: "Payment Methods (Revenue Share)" },
+      { ref: chartRefs.source,     title: "Revenue by Source" },
+      { ref: chartRefs.weekday,    title: "Orders by Weekday" },
+      { ref: chartRefs.hour,       title: "Orders by Hour" },
+    ];
+
+    for (const block of chartBlocks) {
+      const el = block.ref.current as HTMLElement | null;
+      if (!el) continue;
+
+      const png = await chartCardToPng(el, 1500).catch(() => null);
+      if (!png) continue;
+
+      // page break if image won't fit
+      const imgW = pageW - margin * 2;
+      const imgH = (png.h * imgW) / png.w;
+      const needed = 8 + 4 + imgH; // title + gap + image
+
+      if (cursorY + needed > pageH - 14) {
+        // footer page number before we add a new page
+        addFooterPageNumber(doc);
+        doc.addPage();
+        cursorY = margin;
+      }
+
+      doc.setFontSize(11);
+      doc.text(block.title, margin, cursorY);
+      cursorY += 4;
+      doc.addImage(png.dataUrl, "PNG", margin, cursorY, imgW, imgH, undefined, "FAST");
+      cursorY += imgH + 8;
+    }
+
+    // 5) Top lists
+    if (cursorY > pageH - 80) { addFooterPageNumber(doc); doc.addPage(); cursorY = margin; }
+
+    doc.setFontSize(12);
+    doc.text("Top 10 Orders (Revenue)", margin, cursorY);
+    autoTable(doc, {
+      startY: cursorY + 3,
+      head: [["Order ID", "Source", "Method", "Revenue", "Date"]],
+      body: topOrders.map((r) => [
+        r.orderId,
+        r.source,
+        r.method || "—",
+        formatMoney(r.revenue),
+        r.date,
+      ]),
+      styles: { fontSize: 9, cellPadding: 2 },
+      headStyles: { fillColor: [14, 165, 233] },
+      theme: "grid",
+      tableWidth: (pageW - margin * 2) / 2 - 2,
+      margin: { left: margin },
+    });
+
+    // @ts-ignore
+    let topOrdersBottom = (doc as any).lastAutoTable.finalY;
+
+    doc.setFontSize(12);
+    doc.text("Top 10 Customers", margin + (pageW - margin * 2) / 2 + 2, cursorY);
+    autoTable(doc, {
+      startY: cursorY + 3,
+      head: [["Customer", "Orders", "Revenue"]],
+      body: topCustomers.map((c) => [c.customer, String(c.orders), formatMoney(c.revenue)]),
+      styles: { fontSize: 9, cellPadding: 2 },
+      headStyles: { fillColor: [234, 88, 12] },
+      theme: "grid",
+      tableWidth: (pageW - margin * 2) / 2 - 2,
+      margin: { left: margin + (pageW - margin * 2) / 2 + 2 },
+    });
+    // @ts-ignore
+    let topCustomersBottom = (doc as any).lastAutoTable.finalY;
+    cursorY = Math.max(topOrdersBottom, topCustomersBottom) + 6;
+
+    // 6) Raw orders (compact)
+    if (cursorY > pageH - 40) { addFooterPageNumber(doc); doc.addPage(); cursorY = margin; }
+    doc.setFontSize(12);
+    doc.text("Orders (compact)", margin, cursorY);
+    autoTable(doc, {
+      startY: cursorY + 4,
       head: [["Created", "Source", "Method", "Order ID", "Revenue"]],
-      body: viewRows.slice(0, 200).map((r) => [
+      body: viewRows.map((r) => [
         formatDateTimeISO(r.createdAt),
         r.source,
         r.method || "—",
-        String(r.orderId),
+        r.orderId,
         formatMoney(Number(r.revenue) || 0),
       ]),
       styles: { fontSize: 8, cellPadding: 1.5 },
-      headStyles: { fillColor: [67, 56, 202] }, // indigo-700
+      headStyles: { fillColor: [67, 56, 202] },
       theme: "grid",
+      // we'll let autoTable paginate
     });
-    if (viewRows.length > 200) {
-      // @ts-ignore
-      const lastY = (doc as any).lastAutoTable?.finalY ?? 280;
-      doc.setFontSize(9);
-      doc.text(`(+${viewRows.length - 200} more rows not shown)`, margin, Math.min(lastY + 6, pageHeight - 10));
-    }
+
+    // Footer page number on final page
+    addFooterPageNumber(doc);
 
     doc.save(`orders-report-${from}_${to}.pdf`);
+  }
+
+  function addFooterPageNumber(doc: jsPDF) {
+    const pageCount = doc.getNumberOfPages();
+    const pageW = doc.internal.pageSize.getWidth();
+    const pageH = doc.internal.pageSize.getHeight();
+    doc.setFontSize(9);
+    doc.setTextColor(120);
+    doc.text(`Page ${pageCount}`, pageW - 20, pageH - 8, { align: "right" });
   }
 
   /* =============================== UI =============================== */
@@ -462,13 +624,10 @@ export default function AdminOrdersPage() {
     { key: "details", label: "Details" },
   ];
 
-  // date presets
   function applyPreset(preset: "this-month" | "last-7" | "last-30" | "all") {
     const today = new Date();
-    const tz = today.getTimezoneOffset();
     const end = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
     const start = new Date(end);
-
     if (preset === "this-month") {
       const first = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1));
       setFrom(first.toISOString().slice(0, 10));
@@ -482,7 +641,6 @@ export default function AdminOrdersPage() {
       setFrom(start.toISOString().slice(0, 10));
       setTo(end.toISOString().slice(0, 10));
     } else {
-      // all time (fallback to a very early date)
       setFrom("1970-01-01");
       setTo(end.toISOString().slice(0, 10));
     }
@@ -497,15 +655,12 @@ export default function AdminOrdersPage() {
             <div>
               <div className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Admin</div>
               <h1 className="text-2xl font-semibold text-slate-900">Orders</h1>
-              <p className="text-sm text-slate-500">
-                Advanced analytics across DB (COD / Card-on-Delivery) and Stripe (Online Card).
-              </p>
+              <p className="text-sm text-slate-500">Advanced analytics across DB and Stripe.</p>
             </div>
             <div className="flex gap-2 flex-wrap">
               <button
                 onClick={generatePdf}
                 className="inline-flex items-center gap-2 rounded-lg border border-slate-300 bg-white px-4 py-2 text-sm hover:bg-slate-50"
-                title="Generate PDF report"
               >
                 📄 Report (PDF)
               </button>
@@ -535,11 +690,8 @@ export default function AdminOrdersPage() {
           {/* Secondary stats */}
           <div className="mt-4 grid gap-4 sm:grid-cols-3">
             <MiniStat title="Average Order Value" value={formatMoney(avgOrderValue)} />
-            <MiniStat
-              title="DB vs Stripe (Revenue)"
-              value={bySource.map((s) => `${s.name}: ${formatMoney(s.revenue)}`).join(" | ") || "—"}
-            />
-            <MiniStat title="Methods (Orders)" value={byMethod.map((m) => `${m.name}: ${m.orders}`).join(" | ") || "—"} />
+            <MiniStat title="DB vs Stripe (Revenue)" value={bySource.map(s => `${s.name}: ${formatMoney(s.revenue)}`).join(" | ") || "—"} />
+            <MiniStat title="Methods (Orders)" value={byMethod.map(m => `${m.name}: ${m.orders}`).join(" | ") || "—"} />
           </div>
         </div>
 
@@ -567,30 +719,10 @@ export default function AdminOrdersPage() {
               </div>
 
               <div className="flex gap-2">
-                <button
-                  className="h-10 px-3 rounded-xl border border-slate-300 bg-white text-sm hover:bg-slate-50"
-                  onClick={() => applyPreset("this-month")}
-                >
-                  This Month
-                </button>
-                <button
-                  className="h-10 px-3 rounded-xl border border-slate-300 bg-white text-sm hover:bg-slate-50"
-                  onClick={() => applyPreset("last-7")}
-                >
-                  Last 7 days
-                </button>
-                <button
-                  className="h-10 px-3 rounded-xl border border-slate-300 bg-white text-sm hover:bg-slate-50"
-                  onClick={() => applyPreset("last-30")}
-                >
-                  Last 30 days
-                </button>
-                <button
-                  className="h-10 px-3 rounded-xl border border-slate-300 bg-white text-sm hover:bg-slate-50"
-                  onClick={() => applyPreset("all")}
-                >
-                  All
-                </button>
+                <button className="h-10 px-3 rounded-xl border border-slate-300 bg-white text-sm hover:bg-slate-50" onClick={() => applyPreset("this-month")}>This Month</button>
+                <button className="h-10 px-3 rounded-xl border border-slate-300 bg-white text-sm hover:bg-slate-50" onClick={() => applyPreset("last-7")}>Last 7 days</button>
+                <button className="h-10 px-3 rounded-xl border border-slate-300 bg-white text-sm hover:bg-slate-50" onClick={() => applyPreset("last-30")}>Last 30 days</button>
+                <button className="h-10 px-3 rounded-xl border border-slate-300 bg-white text-sm hover:bg-slate-50" onClick={() => applyPreset("all")}>All</button>
               </div>
 
               <div>
@@ -605,18 +737,10 @@ export default function AdminOrdersPage() {
             </div>
 
             <div className="flex gap-2">
-              {[
-                { k: "combined", label: "Combined" },
-                { k: "db", label: "DB (COD & Card-OD)" },
-                { k: "stripe", label: "Stripe (Online Card)" },
-              ].map((t) => (
-                <button
-                  key={t.k}
-                  onClick={() => setTab(t.k as TabKey)}
-                  className={`rounded-xl border px-3 py-2 text-sm ${
-                    tab === t.k ? "border-black bg-black text-white" : "border-slate-300 bg-white hover:bg-slate-50"
-                  }`}
-                >
+              {[{k:"combined",label:"Combined"},{k:"db",label:"DB (COD & Card-OD)"},{k:"stripe",label:"Stripe (Online Card)"}].map(t=>(
+                <button key={t.k}
+                  onClick={()=>setTab(t.k as TabKey)}
+                  className={`rounded-xl border px-3 py-2 text-sm ${tab===t.k ? "border-black bg-black text-white" : "border-slate-300 bg-white hover:bg-slate-50"}`}>
                   {t.label}
                 </button>
               ))}
@@ -624,10 +748,10 @@ export default function AdminOrdersPage() {
           </div>
         </div>
 
-        {/* ====== Analytics Charts (SVG → PDF) ====== */}
-        <div ref={chartsRef} className="mb-6 grid gap-4 lg:grid-cols-2">
+        {/* ====== Chart Cards (each wrapped in its own ref) ====== */}
+        <div className="mb-6 grid gap-4 lg:grid-cols-2">
           {/* Daily Revenue & Orders */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <div ref={chartRefs.daily} className="rounded-2xl border border-slate-200 bg-white p-4">
             <div className="mb-2 text-sm text-slate-700">Daily Revenue & Orders</div>
             <div className="h-64">
               <ResponsiveContainer>
@@ -635,10 +759,7 @@ export default function AdminOrdersPage() {
                   <CartesianGrid strokeDasharray="3 3" stroke="#E5E7EB" />
                   <XAxis dataKey="date" stroke="#6B7280" />
                   <YAxis stroke="#6B7280" />
-                  <Tooltip
-                    contentStyle={{ fontSize: 12 }}
-                    formatter={(v: any, k: any) => (k === "orders" ? v : formatMoney(Number(v) || 0))}
-                  />
+                  <Tooltip contentStyle={{ fontSize: 12 }} formatter={(v: any, k: any) => (k === "orders" ? v : formatMoney(Number(v) || 0))} />
                   <Legend />
                   <Line type="monotone" dataKey="revenue" name="Revenue" stroke="#6366F1" strokeWidth={2} dot={false} />
                   <Line type="monotone" dataKey="orders" name="Orders" stroke="#10B981" strokeWidth={2} dot={false} yAxisId={1} />
@@ -649,7 +770,7 @@ export default function AdminOrdersPage() {
           </div>
 
           {/* Cumulative Revenue */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <div ref={chartRefs.cumulative} className="rounded-2xl border border-slate-200 bg-white p-4">
             <div className="mb-2 text-sm text-slate-700">Cumulative Revenue</div>
             <div className="h-64">
               <ResponsiveContainer>
@@ -670,8 +791,8 @@ export default function AdminOrdersPage() {
             </div>
           </div>
 
-          {/* Revenue vs Cost by Day */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          {/* Revenue vs Cost */}
+          <div ref={chartRefs.revCost} className="rounded-2xl border border-slate-200 bg-white p-4">
             <div className="mb-2 text-sm text-slate-700">Revenue vs Cost (Daily)</div>
             <div className="h-64">
               <ResponsiveContainer>
@@ -689,7 +810,7 @@ export default function AdminOrdersPage() {
           </div>
 
           {/* Payment Method Mix */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <div ref={chartRefs.method} className="rounded-2xl border border-slate-200 bg-white p-4">
             <div className="mb-2 text-sm text-slate-700">Payment Methods (Revenue Share)</div>
             <div className="h-64">
               <ResponsiveContainer>
@@ -697,9 +818,7 @@ export default function AdminOrdersPage() {
                   <Tooltip formatter={(v: any) => formatMoney(Number(v) || 0)} contentStyle={{ fontSize: 12 }} />
                   <Legend />
                   <Pie data={byMethod} dataKey="value" nameKey="name" innerRadius={40} outerRadius={80} paddingAngle={2}>
-                    {byMethod.map((entry, i) => (
-                      <Cell key={entry.name} fill={COLORS[i % COLORS.length]} />
-                    ))}
+                    {byMethod.map((entry, i) => <Cell key={entry.name} fill={COLORS[i % COLORS.length]} />)}
                   </Pie>
                 </PieChart>
               </ResponsiveContainer>
@@ -707,7 +826,7 @@ export default function AdminOrdersPage() {
           </div>
 
           {/* Revenue by Source */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <div ref={chartRefs.source} className="rounded-2xl border border-slate-200 bg-white p-4">
             <div className="mb-2 text-sm text-slate-700">Revenue by Source</div>
             <div className="h-64">
               <ResponsiveContainer>
@@ -717,9 +836,7 @@ export default function AdminOrdersPage() {
                   <YAxis stroke="#6B7280" />
                   <Tooltip formatter={(v: any) => formatMoney(Number(v) || 0)} contentStyle={{ fontSize: 12 }} />
                   <Bar dataKey="revenue" name="Revenue">
-                    {bySource.map((entry, i) => (
-                      <Cell key={entry.name} fill={COLORS[i % COLORS.length]} />
-                    ))}
+                    {bySource.map((entry, i) => <Cell key={entry.name} fill={COLORS[i % COLORS.length]} />)}
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
@@ -727,7 +844,7 @@ export default function AdminOrdersPage() {
           </div>
 
           {/* Orders by Weekday */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <div ref={chartRefs.weekday} className="rounded-2xl border border-slate-200 bg-white p-4">
             <div className="mb-2 text-sm text-slate-700">Orders by Weekday</div>
             <div className="h-64">
               <ResponsiveContainer>
@@ -745,7 +862,7 @@ export default function AdminOrdersPage() {
           </div>
 
           {/* Orders by Hour */}
-          <div className="rounded-2xl border border-slate-200 bg-white p-4">
+          <div ref={chartRefs.hour} className="rounded-2xl border border-slate-200 bg-white p-4">
             <div className="mb-2 text-sm text-slate-700">Orders by Hour</div>
             <div className="h-64">
               <ResponsiveContainer>
@@ -756,15 +873,7 @@ export default function AdminOrdersPage() {
                   <Tooltip contentStyle={{ fontSize: 12 }} />
                   <Legend />
                   <Line type="monotone" dataKey="orders" name="Orders" stroke="#F97316" strokeWidth={2} dot={false} />
-                  <Line
-                    type="monotone"
-                    dataKey="revenue"
-                    name="Revenue"
-                    stroke="#22C55E"
-                    strokeWidth={2}
-                    dot={false}
-                    yAxisId={1}
-                  />
+                  <Line type="monotone" dataKey="revenue" name="Revenue" stroke="#22C55E" strokeWidth={2} dot={false} yAxisId={1} />
                   <YAxis yAxisId={1} orientation="right" stroke="#6B7280" />
                 </LineChart>
               </ResponsiveContainer>
@@ -799,9 +908,7 @@ export default function AdminOrdersPage() {
                   ))}
                   {topOrders.length === 0 && (
                     <tr>
-                      <td colSpan={5} className="px-3 py-8 text-center text-slate-500">
-                        —
-                      </td>
+                      <td colSpan={5} className="px-3 py-8 text-center text-slate-500">—</td>
                     </tr>
                   )}
                 </tbody>
@@ -830,9 +937,7 @@ export default function AdminOrdersPage() {
                   ))}
                   {topCustomers.length === 0 && (
                     <tr>
-                      <td colSpan={3} className="px-3 py-8 text-center text-slate-500">
-                        —
-                      </td>
+                      <td colSpan={3} className="px-3 py-8 text-center text-slate-500">—</td>
                     </tr>
                   )}
                 </tbody>
@@ -849,20 +954,11 @@ export default function AdminOrdersPage() {
                 {headers.map((h) => (
                   <th key={h.key} className="px-3 py-3 text-left">
                     <button
-                      onClick={() => {
-                        if (sortKey === h.key) setSortDir(sortDir === "asc" ? "desc" : "asc");
-                        else {
-                          setSortKey(h.key);
-                          setSortDir("desc");
-                        }
-                      }}
-                      className="flex items-center gap-1"
-                      title="Sort"
+                      onClick={() => { if (sortKey === h.key) setSortDir(sortDir === "asc" ? "desc" : "asc"); else { setSortKey(h.key); setSortDir("desc"); } }}
+                      className="flex items-center gap-1" title="Sort"
                     >
                       {h.label}
-                      {sortKey === h.key ? (
-                        <span className="text-xs">{sortDir === "asc" ? "▲" : "▼"}</span>
-                      ) : null}
+                      {sortKey === h.key ? <span className="text-xs">{sortDir === "asc" ? "▲" : "▼"}</span> : null}
                     </button>
                   </th>
                 ))}
@@ -886,9 +982,7 @@ export default function AdminOrdersPage() {
                     <td className="px-3 py-2">{formatMoney(Number(r.cost) || 0)}</td>
                     <td className="px-3 py-2">{r.date}</td>
                     <td className="px-3 py-2">{r.customer || "—"}</td>
-                    <td className="px-3 py-2 max-w-[320px] truncate" title={r.details}>
-                      {r.details || "—"}
-                    </td>
+                    <td className="px-3 py-2 max-w-[320px] truncate" title={r.details}>{r.details || "—"}</td>
                   </tr>
                 ))
               )}
@@ -897,8 +991,9 @@ export default function AdminOrdersPage() {
         </div>
 
         <p className="mt-3 text-xs text-slate-500">
-          Data sources: DB (COD & Card-on-Delivery) → <code>/api/analytics/db-orders</code>, Stripe (paid sessions) →{" "}
-          <code>/api/analytics/stripe-orders</code>, rollup → <code>/api/analytics/summary</code>.
+          Data sources: DB (COD & Card-on-Delivery) → <code>/api/analytics/db-orders</code>,
+          Stripe (paid sessions) → <code>/api/analytics/stripe-orders</code>, rollup →
+          <code> /api/analytics/summary</code>.
         </p>
       </DashboardLayout>
     </AdminGuard>
@@ -910,19 +1005,12 @@ function KPI({
   title,
   value,
   tone = "muted",
-}: {
-  title: string;
-  value: string | number;
-  tone?: "muted" | "success" | "warning" | "info";
-}) {
+}: { title: string; value: string | number; tone?: "muted" | "success" | "warning" | "info"; }) {
   const bar =
-    tone === "success"
-      ? "bg-emerald-500/70"
-      : tone === "warning"
-      ? "bg-amber-500/70"
-      : tone === "info"
-      ? "bg-indigo-500/70"
-      : "bg-slate-400/70";
+    tone === "success" ? "bg-emerald-500/70"
+    : tone === "warning" ? "bg-amber-500/70"
+    : tone === "info" ? "bg-indigo-500/70"
+    : "bg-slate-400/70";
   return (
     <div className="relative rounded-xl border border-slate-200 bg-white p-4 shadow-sm">
       <span className={`absolute left-0 top-0 h-full w-1.5 rounded-l-xl ${bar}`} />

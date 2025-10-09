@@ -1,8 +1,14 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
+"use client";
+
 import React, { useEffect, useMemo, useRef, useState, forwardRef } from "react";
 import useSWR from "swr";
 import { useSession, signIn } from "next-auth/react";
 import DashboardLayout from "../components/DashboardLayout";
+
+/* ---------- PDF ---------- */
+import jsPDF from "jspdf";
+import autoTable from "jspdf-autotable";
 
 /* =============================== Fetcher =============================== */
 const fetcher = async (url: string) => {
@@ -63,12 +69,7 @@ function Button({
   return (
     <button
       {...props}
-      className={[
-        base,
-        sizes[size],
-        tones[tone][variant],
-        className || "",
-      ].join(" ")}
+      className={[base, sizes[size], tones[tone][variant], className || ""].join(" ")}
     >
       {children}
     </button>
@@ -200,9 +201,7 @@ function useToasts() {
   function push(title: string, tone: ToastItem["tone"] = "info") {
     const id = Date.now();
     setItems((xs) => [...xs, { id, title, tone }]);
-    setTimeout(() => {
-      setItems((xs) => xs.filter((x) => x.id !== id));
-    }, 3000);
+    setTimeout(() => setItems((xs) => xs.filter((x) => x.id !== id)), 3000);
   }
   function remove(id: number) {
     setItems((xs) => xs.filter((x) => x.id !== id));
@@ -225,11 +224,7 @@ function ToastHost({ items, onClose }: { items: ToastItem[]; onClose: (id: numbe
             className={`text-white text-sm rounded-lg shadow px-3 py-2 ${toneClass} flex items-center gap-3`}
           >
             <span>{t.title}</span>
-            <button
-              className="text-white/70 hover:text-white ml-2"
-              onClick={() => onClose(t.id)}
-              aria-label="Dismiss"
-            >
+            <button className="text-white/70 hover:text-white ml-2" onClick={() => onClose(t.id)} aria-label="Dismiss">
               ✕
             </button>
           </div>
@@ -266,6 +261,16 @@ function downloadCSV(rows: any[], filename = "products.csv") {
   URL.revokeObjectURL(url);
 }
 
+async function loadImageAsDataURL(path: string): Promise<string> {
+  const res = await fetch(path);
+  const blob = await res.blob();
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onloadend = () => resolve(String(reader.result));
+    reader.readAsDataURL(blob);
+  });
+}
+
 /* =============================== Types =============================== */
 type Product = {
   _id: string;
@@ -282,6 +287,13 @@ type Product = {
   tags: string[];
 };
 
+type ProductSales = {
+  slug: string;
+  name: string;
+  qty: number;
+  revenue: number;
+};
+
 type AvailabilityFilter = "all" | "available" | "unavailable";
 
 /* =============================== Main =============================== */
@@ -293,6 +305,17 @@ export default function ProductsAdminPage() {
 
   /* ----- Toasts ----- */
   const toasts = useToasts();
+
+  /* ------- Date range for report / sales analytics (default: current month) ------- */
+  const [from, setFrom] = useState("");
+  const [to, setTo] = useState("");
+  useEffect(() => {
+    const now = new Date();
+    const first = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+    const last = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() + 1, 0));
+    setFrom(first.toISOString().slice(0, 10));
+    setTo(last.toISOString().slice(0, 10));
+  }, []);
 
   /* ----- Search & Filters ----- */
   const [q, setQ] = useState("");
@@ -368,6 +391,16 @@ export default function ProductsAdminPage() {
   const { data, isLoading, error, mutate } = useSWR<Product[]>(listUrl, fetcher);
   const all = data ?? [];
 
+  /* ---- Sales analytics (optional endpoint) ---- */
+  const salesUrl =
+    from && to ? `/api/analytics/product-sales?from=${from}&to=${to}` : null;
+  const { data: salesBox } = useSWR<{ items: ProductSales[] }>(
+    salesUrl,
+    fetcher,
+    { revalidateOnFocus: false }
+  );
+  const sales = salesBox?.items ?? [];
+
   /* ----- Client-side availability filter + sort ----- */
   const filtered = useMemo(() => {
     let rows = [...all];
@@ -375,7 +408,7 @@ export default function ProductsAdminPage() {
     if (availability === "unavailable") rows = rows.filter((r) => !r.isAvailable);
 
     if (sort === "newest") {
-      // keep as-is
+      // keep as-is (API returns newest)
     } else if (sort === "name-asc") rows.sort((a, b) => a.name.localeCompare(b.name));
     else if (sort === "name-desc") rows.sort((a, b) => b.name.localeCompare(a.name));
     else if (sort === "price-asc") rows.sort((a, b) => a.price - b.price);
@@ -394,7 +427,7 @@ export default function ProductsAdminPage() {
 
   const items = filtered.slice((clampedPage - 1) * pageSize, clampedPage * pageSize);
 
-  /* =============================== Handlers =============================== */
+  /* =============================== Handlers (CRUD) =============================== */
   function openCreate() {
     setEditing(null);
     setF({
@@ -500,17 +533,10 @@ export default function ProductsAdminPage() {
   // Optimistic toggle with rollback (SWR v2)
   async function toggleAvailability(p: Product) {
     const next = !p.isAvailable;
-
-    // function that transforms current cache → updated cache
     const optimistic = (xs: Product[] = []) =>
       xs.map((x) => (x._id === p._id ? { ...x, isAvailable: next } : x));
 
-    // Optimistic update without revalidate (v2 API)
-    await mutate(optimistic, {
-      revalidate: false,       // don't refetch yet
-      populateCache: true,     // write result into cache
-      rollbackOnError: true,   // if fetch fails, rollback to previous
-    });
+    await mutate(optimistic, { revalidate: false, populateCache: true, rollbackOnError: true });
 
     try {
       const res = await fetch(`/api/products/${encodeURIComponent(p.slug)}`, {
@@ -519,31 +545,23 @@ export default function ProductsAdminPage() {
         body: JSON.stringify({ isAvailable: next }),
       });
       if (!res.ok) throw new Error(await res.text());
-
-      // sync with server
       await mutate();
       toasts.push(next ? "Marked available" : "Marked unavailable", "success");
     } catch (err: any) {
-      // SWR rolls back automatically; we revalidate to be in sync
       await mutate();
       toasts.push(err?.message || "Failed to toggle", "danger");
     }
   }
 
-  // Bulk actions (client-side sequential)
+  // Bulk actions
   async function bulkToggle(next: boolean) {
     const ids = new Set(selectedIds);
     const rows = items.filter((x) => ids.has(x._id));
     if (rows.length === 0) return;
 
-    // optimistic (SWR v2)
     await mutate(
       (xs: Product[] = []) => xs.map((x) => (ids.has(x._id) ? { ...x, isAvailable: next } : x)),
-      {
-        revalidate: false,
-        populateCache: true,
-        rollbackOnError: true,
-      }
+      { revalidate: false, populateCache: true, rollbackOnError: true }
     );
 
     try {
@@ -558,10 +576,7 @@ export default function ProductsAdminPage() {
       );
       await mutate();
       setSelectedIds([]);
-      toasts.push(
-        next ? "Selected products marked available" : "Selected products marked unavailable",
-        "success"
-      );
+      toasts.push(next ? "Selected products marked available" : "Selected products marked unavailable", "success");
     } catch {
       await mutate();
       toasts.push("Bulk toggle failed", "danger");
@@ -575,9 +590,7 @@ export default function ProductsAdminPage() {
     if (!confirm(`Delete ${rows.length} product(s)? This cannot be undone.`)) return;
 
     try {
-      await Promise.all(
-        rows.map((p) => fetch(`/api/products/${encodeURIComponent(p.slug)}`, { method: "DELETE" }))
-      );
+      await Promise.all(rows.map((p) => fetch(`/api/products/${encodeURIComponent(p.slug)}`, { method: "DELETE" })));
       await mutate();
       setSelectedIds([]);
       toasts.push("Selected products deleted", "success");
@@ -652,45 +665,308 @@ export default function ProductsAdminPage() {
     { value: "Deserts", label: "Deserts" },
   ];
 
+  /* =============================== Analytics for PDF =============================== */
+  const kpis = useMemo(() => {
+    const avail = all.filter((p) => p.isAvailable).length;
+    const unavail = all.length - avail;
+    const sig = all.filter((p) => p.isSignatureToday).length;
+    return { total: all.length, available: avail, unavailable: unavail, signature: sig };
+  }, [all]);
+
+  const byCategory = useMemo(() => {
+    const map = new Map<string, { category: string; total: number; available: number }>();
+    for (const p of all) {
+      const key = p.category || "Uncategorized";
+      if (!map.has(key)) map.set(key, { category: key, total: 0, available: 0 });
+      const row = map.get(key)!;
+      row.total += 1;
+      if (p.isAvailable) row.available += 1;
+    }
+    return Array.from(map.values()).sort((a, b) => b.total - a.total);
+  }, [all]);
+
+  const priceStats = useMemo(() => {
+    if (all.length === 0) return { min: 0, max: 0, avg: 0, avgDiscount: 0 };
+    let min = Infinity, max = -Infinity, sum = 0, sumDisc = 0, n = 0;
+    for (const p of all) {
+      const fp = Math.max((p.price || 0) - (p.promotion || 0), 0);
+      if (fp < min) min = fp;
+      if (fp > max) max = fp;
+      sum += fp;
+      sumDisc += p.promotion || 0;
+      n++;
+    }
+    return { min, max, avg: sum / n, avgDiscount: sumDisc / n };
+  }, [all]);
+
+  const topDiscounted = useMemo(() => {
+    return [...all]
+      .filter((p) => p.promotion > 0)
+      .sort((a, b) => b.promotion - a.promotion)
+      .slice(0, 10)
+      .map((p) => ({
+        name: p.name,
+        category: p.category || "",
+        discount: p.promotion,
+        price: p.price,
+        final: Math.max((p.price || 0) - (p.promotion || 0), 0),
+      }));
+  }, [all]);
+
+  const topExpensive = useMemo(() => {
+    return [...all]
+      .sort((a, b) => b.price - a.price)
+      .slice(0, 10)
+      .map((p) => ({
+        name: p.name,
+        category: p.category || "",
+        price: p.price,
+        promotion: p.promotion,
+        final: Math.max((p.price || 0) - (p.promotion || 0), 0),
+      }));
+  }, [all]);
+
+  const salesBySlug = useMemo(() => {
+    const map = new Map<string, ProductSales>();
+    for (const s of sales) map.set(s.slug, s);
+    return map;
+  }, [sales]);
+
+  const topFastMoving = useMemo(() => {
+    if (!sales.length) return [];
+    return [...sales]
+      .sort((a, b) => b.qty - a.qty)
+      .slice(0, 10);
+  }, [sales]);
+
+  const topByRevenue = useMemo(() => {
+    if (!sales.length) return [];
+    return [...sales]
+      .sort((a, b) => b.revenue - a.revenue)
+      .slice(0, 10);
+  }, [sales]);
+
+  /* =============================== PDF Report =============================== */
+  async function generateProductsPdf() {
+    try {
+      const doc = new jsPDF({ unit: "mm", format: "a4" });
+      const pageWidth = doc.internal.pageSize.getWidth();
+      const pageHeight = doc.internal.pageSize.getHeight();
+      const L = 12; // margin left
+      let y = 14;
+
+      // Header with logo + address
+      const logoUrl = await loadImageAsDataURL("/images/RalahamiLogo.png");
+      const headerH = 16;
+      doc.addImage(logoUrl, "PNG", L, y - 6, 28, headerH);
+      doc.setFontSize(14);
+      doc.text("Ralahami Restaurant — Product Catalogue Report", L + 32, y + 2);
+      doc.setFontSize(9);
+      doc.text("No. 24, Colombo Road, Galle, Sri Lanka | +94 77 123 4567 | https://ralahami.lk", L + 32, y + 8);
+      doc.text(`Period: ${from}  →  ${to}    Generated: ${new Date().toLocaleString()}`, L + 32, y + 13);
+
+      // Horizontal line
+      doc.setDrawColor(220);
+      doc.line(L, y + 16, pageWidth - L, y + 16);
+      y += 22;
+
+      // KPIs
+      doc.setFontSize(12);
+      doc.text("Overview", L, y);
+      y += 4;
+      doc.setFontSize(10);
+      doc.text(`Total Products: ${kpis.total}`, L, y);
+      doc.text(`Available: ${kpis.available}`, L + 60, y);
+      doc.text(`Unavailable: ${kpis.unavailable}`, L + 120, y);
+      y += 6;
+      doc.text(`Signature Today: ${kpis.signature}`, L, y);
+      doc.text(
+        `Price — Min: LKR ${priceStats.min.toFixed(2)} • Avg: LKR ${priceStats.avg.toFixed(2)} • Max: LKR ${priceStats.max.toFixed(2)} • Avg Discount: LKR ${priceStats.avgDiscount.toFixed(2)}`,
+        L,
+        (y += 6)
+      );
+
+      // Category table
+      y += 2;
+      doc.setFontSize(12);
+      doc.text("Category Distribution", L, (y += 8));
+      autoTable(doc, {
+        startY: y,
+        head: [["Category", "Products", "Available", "Availability %"]],
+        body: byCategory.map((c) => [
+          c.category,
+          c.total,
+          c.available,
+          ((c.available / Math.max(1, c.total)) * 100).toFixed(1) + "%",
+        ]),
+        styles: { fontSize: 9, cellPadding: 2 },
+        headStyles: { fillColor: [15, 23, 42] }, // slate-900
+        theme: "grid",
+        margin: { left: L, right: L },
+      });
+      // @ts-ignore
+      y = (doc as any).lastAutoTable.finalY + 10;
+
+      // Top discounted & expensive
+      doc.setFontSize(12);
+      doc.text("Top 10 Highest Discounts", L, y);
+      autoTable(doc, {
+        startY: y + 2,
+        head: [["Product", "Category", "Price", "Discount", "Final"]],
+        body: topDiscounted.map((p) => [
+          p.name,
+          p.category,
+          `LKR ${p.price.toFixed(2)}`,
+          `LKR ${p.discount.toFixed(2)}`,
+          `LKR ${p.final.toFixed(2)}`,
+        ]),
+        styles: { fontSize: 9, cellPadding: 2 },
+        headStyles: { fillColor: [99, 102, 241] }, // indigo-500
+        theme: "grid",
+        margin: { left: L, right: L },
+      });
+      // @ts-ignore
+      y = (doc as any).lastAutoTable.finalY + 8;
+
+      doc.setFontSize(12);
+      doc.text("Top 10 Most Expensive (List Price)", L, y);
+      autoTable(doc, {
+        startY: y + 2,
+        head: [["Product", "Category", "List Price", "Final Price", "Discount"]],
+        body: topExpensive.map((p) => [
+          p.name,
+          p.category,
+          `LKR ${p.price.toFixed(2)}`,
+          `LKR ${p.final.toFixed(2)}`,
+          `LKR ${p.promotion.toFixed(2)}`,
+        ]),
+        styles: { fontSize: 9, cellPadding: 2 },
+        headStyles: { fillColor: [16, 185, 129] }, // emerald-500
+        theme: "grid",
+        margin: { left: L, right: L },
+      });
+      // @ts-ignore
+      y = (doc as any).lastAutoTable.finalY + 10;
+
+      // Fast moving (if available)
+      if (topFastMoving.length || topByRevenue.length) {
+        if (y > pageHeight - 60) {
+          doc.addPage();
+          y = 20;
+        }
+        doc.setFontSize(12);
+        doc.text("Fast-Moving (By Quantity)", L, y);
+        autoTable(doc, {
+          startY: y + 2,
+          head: [["Product", "Qty", "Revenue"]],
+          body: topFastMoving.map((s) => [
+            s.name,
+            s.qty,
+            `LKR ${s.revenue.toFixed(2)}`,
+          ]),
+          styles: { fontSize: 9, cellPadding: 2 },
+          headStyles: { fillColor: [245, 158, 11] }, // amber-500
+          theme: "grid",
+          margin: { left: L, right: L },
+        });
+        // @ts-ignore
+        y = (doc as any).lastAutoTable.finalY + 8;
+
+        doc.setFontSize(12);
+        doc.text("Top by Revenue", L, y);
+        autoTable(doc, {
+          startY: y + 2,
+          head: [["Product", "Revenue", "Qty"]],
+          body: topByRevenue.map((s) => [
+            s.name,
+            `LKR ${s.revenue.toFixed(2)}`,
+            s.qty,
+          ]),
+          styles: { fontSize: 9, cellPadding: 2 },
+          headStyles: { fillColor: [59, 130, 246] }, // blue-500
+          theme: "grid",
+          margin: { left: L, right: L },
+        });
+        // @ts-ignore
+        y = (doc as any).lastAutoTable.finalY + 10;
+      } else {
+        if (y > pageHeight - 40) {
+          doc.addPage();
+          y = 20;
+        }
+        doc.setFontSize(10);
+        doc.text(
+          "Fast-moving analysis requires /api/analytics/product-sales (slug, name, qty, revenue). No sales data was returned for the selected period.",
+          L,
+          y
+        );
+        y += 8;
+      }
+
+      // Compact catalogue (auto spills to new pages)
+      doc.setFontSize(12);
+      doc.text("Catalogue (compact)", L, y);
+      autoTable(doc, {
+        startY: y + 2,
+        head: [["Name", "Category", "Available", "Signature", "List", "Promo", "Final"]],
+        body: all.map((p) => [
+          p.name,
+          p.category || "",
+          p.isAvailable ? "Yes" : "No",
+          p.isSignatureToday ? "Yes" : "No",
+          `LKR ${Number(p.price || 0).toFixed(2)}`,
+          `LKR ${Number(p.promotion || 0).toFixed(2)}`,
+          `LKR ${Math.max((p.price || 0) - (p.promotion || 0), 0).toFixed(2)}`,
+        ]),
+        styles: { fontSize: 8, cellPadding: 1.5 },
+        headStyles: { fillColor: [51, 65, 85] }, // slate-700
+        theme: "grid",
+        margin: { left: L, right: L },
+      });
+
+      doc.save(`products-report-${from}_${to}.pdf`);
+      toasts.push("PDF report generated", "success");
+    } catch (e: any) {
+      console.error(e);
+      toasts.push(e?.message || "Failed to generate PDF", "danger");
+    }
+  }
+
   /* =============================== UI =============================== */
   return (
     <DashboardLayout>
       {/* Toasts */}
       <ToastHost items={toasts.items} onClose={toasts.remove} />
 
-      {/* Header – plain professional */}
+      {/* Header */}
       <div className="rounded-2xl border border-slate-200 bg-white px-6 py-6 mb-6 shadow-sm">
         <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
           <div>
             <div className="text-[11px] uppercase tracking-[0.22em] text-slate-500">Admin</div>
             <h1 className="text-2xl font-semibold text-slate-900">Products</h1>
-            <p className="text-sm text-slate-500">Curate your menu, pricing, and visibility.</p>
+            <p className="text-sm text-slate-500">
+              Curate your menu, pricing, availability, and generate detailed PDF reports.
+            </p>
           </div>
           <div className="flex gap-2 flex-wrap">
-            <Button
-              variant="outline"
-              tone="neutral"
-              onClick={async () => {
-                const res = await fetch("/api/products/report");
-                if (!res.ok) return toasts.push("Failed to generate report", "danger");
-                const blob = await res.blob();
-                const url = window.URL.createObjectURL(blob);
-                const a = document.createElement("a");
-                a.href = url;
-                a.download = "products-report.pdf";
-                a.click();
-                window.URL.revokeObjectURL(url);
-              }}
-            >
+            {/* Report date range quick controls */}
+            <div className="flex items-center gap-2">
+              <span className="text-xs text-slate-600">From</span>
+              <Input type="date" value={from} onChange={(e) => setFrom(e.target.value)} className="w-40" />
+              <span className="text-xs text-slate-600">To</span>
+              <Input type="date" value={to} onChange={(e) => setTo(e.target.value)} className="w-40" />
+            </div>
+
+            <Button variant="outline" tone="neutral" onClick={generateProductsPdf}>
               <span className="text-base">📄</span>
               <span>Report (PDF)</span>
             </Button>
+
             <Button variant="outline" tone="neutral" onClick={exportFilteredCSV}>
               <span className="text-base">⇩</span>
               <span>Export Filtered CSV</span>
             </Button>
 
-            {/* ✅ Fix: add onClick to open create modal */}
             <Button tone="primary" onClick={openCreate}>
               <span className="text-base">＋</span>
               <span>New Product</span>
@@ -700,10 +976,10 @@ export default function ProductsAdminPage() {
 
         {/* KPIs – plain */}
         <div className="mt-5 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-          <KPI title="Total Products" value={all.length} />
-          <KPI title="Visible (Available)" value={all.filter((p) => p.isAvailable).length} tone="success" />
-          <KPI title="Hidden (Unavailable)" value={all.filter((p) => !p.isAvailable).length} tone="warning" />
-          <KPI title="Signature Today" value={all.filter((p) => p.isSignatureToday).length} tone="info" />
+          <KPI title="Total Products" value={kpis.total} />
+          <KPI title="Visible (Available)" value={kpis.available} tone="success" />
+          <KPI title="Hidden (Unavailable)" value={kpis.unavailable} tone="warning" />
+          <KPI title="Signature Today" value={kpis.signature} tone="info" />
         </div>
       </div>
 
@@ -827,7 +1103,7 @@ export default function ProductsAdminPage() {
       )}
 
       {/* Table */}
-      <div className="overflow-hidden rounded-2xl border border-slate-200 bg白 shadow-sm">
+      <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
         <div className="overflow-x-auto">
           <table className="w-full text-sm">
             <thead className="sticky top-0 z-10 bg-slate-50/90 backdrop-blur text-slate-600">
@@ -859,9 +1135,7 @@ export default function ProductsAdminPage() {
                   <td colSpan={7} className="p-8 text-center">
                     <div className="inline-flex flex-col items-center gap-2">
                       <div className="text-rose-600 font-medium">Failed to load products</div>
-                      <Button variant="outline" onClick={() => mutate()}>
-                        Retry
-                      </Button>
+                      <Button variant="outline" onClick={() => mutate()}>Retry</Button>
                     </div>
                   </td>
                 </tr>
@@ -870,9 +1144,7 @@ export default function ProductsAdminPage() {
                   <td colSpan={7} className="p-16 text-center">
                     <div className="inline-flex flex-col items-center gap-3">
                       <div className="text-lg font-semibold">No products found</div>
-                      <div className="text-sm text-slate-500">
-                        Try adjusting filters or create a new product.
-                      </div>
+                      <div className="text-sm text-slate-500">Try adjusting filters or create a new product.</div>
                       <Button onClick={openCreate}>+ Create Product</Button>
                     </div>
                   </td>
@@ -881,6 +1153,7 @@ export default function ProductsAdminPage() {
                 items.map((p, idx) => {
                   const selected = selectedIds.includes(p._id);
                   const finalPrice = Math.max((p.price || 0) - (p.promotion || 0), 0);
+                  const s = salesBySlug.get(p.slug);
                   return (
                     <tr key={p._id} className={idx % 2 === 1 ? "bg-slate-50/30" : ""}>
                       <td className="px-4 py-3">
@@ -890,9 +1163,7 @@ export default function ProductsAdminPage() {
                           checked={selected}
                           onChange={(e) =>
                             setSelectedIds((prev) =>
-                              e.target.checked
-                                ? [...prev, p._id]
-                                : prev.filter((id) => id !== p._id)
+                              e.target.checked ? [...prev, p._id] : prev.filter((id) => id !== p._id)
                             )
                           }
                           className="h-4 w-4 rounded border-slate-300"
@@ -903,17 +1174,12 @@ export default function ProductsAdminPage() {
                           <div className="relative group">
                             {p.images?.[0] ? (
                               // eslint-disable-next-line @next/next/no-img-element
-                              <img
-                                src={p.images[0]}
-                                alt={p.name}
-                                className="h-12 w-12 rounded-md object-cover border"
-                              />
+                              <img src={p.images[0]} alt={p.name} className="h-12 w-12 rounded-md object-cover border" />
                             ) : (
                               <div className="h-12 w-12 rounded-md border flex items-center justify-center text-[10px] text-slate-400">
                                 No image
                               </div>
                             )}
-                            {/* Hover enlarge preview */}
                             {p.images?.[0] && (
                               <div className="pointer-events-none absolute left-14 top-0 hidden group-hover:block">
                                 {/* eslint-disable-next-line @next/next/no-img-element */}
@@ -927,9 +1193,12 @@ export default function ProductsAdminPage() {
                           </div>
                           <div className="min-w-0">
                             <div className="font-medium truncate max-w-[240px]">{p.name}</div>
-                            <div className="text-xs text-slate-500 truncate max-w-[240px]">
-                              Slug: {p.slug}
-                            </div>
+                            <div className="text-xs text-slate-500 truncate max-w-[240px]">Slug: {p.slug}</div>
+                            {!!s && (
+                              <div className="text-[11px] text-emerald-700">
+                                {s.qty} sold • LKR {s.revenue.toFixed(2)}
+                              </div>
+                            )}
                           </div>
                           <IconButton label="View details" onClick={() => openView(p)} title="View details">
                             👁
@@ -943,9 +1212,7 @@ export default function ProductsAdminPage() {
                         <div className="inline-flex flex-col items-center">
                           <span className="font-medium">LKR {finalPrice.toFixed(2)}</span>
                           {p.promotion > 0 && (
-                            <span className="text-[11px] line-through text-slate-400">
-                              LKR {p.price.toFixed(2)}
-                            </span>
+                            <span className="text-[11px] line-through text-slate-400">LKR {p.price.toFixed(2)}</span>
                           )}
                         </div>
                       </td>
@@ -966,12 +1233,8 @@ export default function ProductsAdminPage() {
                           >
                             {p.isAvailable ? "Mark Unavailable" : "Mark Available"}
                           </Button>
-                          <Button variant="outline" size="sm" onClick={() => openEdit(p)}>
-                            Edit
-                          </Button>
-                          <Button tone="danger" size="sm" onClick={() => remove(p.slug)}>
-                            Delete
-                          </Button>
+                          <Button variant="outline" size="sm" onClick={() => openEdit(p)}>Edit</Button>
+                          <Button tone="danger" size="sm" onClick={() => remove(p.slug)}>Delete</Button>
                         </div>
                       </td>
                     </tr>
@@ -1018,38 +1281,19 @@ export default function ProductsAdminPage() {
       {/* Create/Edit Modal */}
       <Modal
         open={isOpen}
-        onClose={() => {
-          setOpen(false);
-          setEditing(null);
-        }}
+        onClose={() => { setOpen(false); setEditing(null); }}
         title={editing ? "Edit Product" : "Create Product"}
         footer={
           <>
-            <Button variant="outline" tone="neutral" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
-            <Button onClick={save} disabled={busy}>
-              {editing ? "Save" : "Create"}
-            </Button>
+            <Button variant="outline" tone="neutral" onClick={() => setOpen(false)}>Cancel</Button>
+            <Button onClick={save} disabled={busy}>{editing ? "Save" : "Create"}</Button>
           </>
         }
       >
         <div className="grid gap-3 sm:grid-cols-2">
-          <Input
-            placeholder="Name"
-            value={f.name}
-            onChange={(e) => setF({ ...f, name: e.target.value })}
-          />
-          <Input
-            placeholder="Slug"
-            value={f.slug}
-            onChange={(e) => setF({ ...f, slug: e.target.value })}
-            disabled={!!editing}
-          />
-          <Select
-            value={f.category}
-            onChange={(e) => setF({ ...f, category: e.target.value })}
-          >
+          <Input placeholder="Name" value={f.name} onChange={(e) => setF({ ...f, name: e.target.value })} />
+          <Input placeholder="Slug" value={f.slug} onChange={(e) => setF({ ...f, slug: e.target.value })} disabled={!!editing} />
+          <Select value={f.category} onChange={(e) => setF({ ...f, category: e.target.value })}>
             {[
               { value: "", label: "All Categories" },
               { value: "Beverages", label: "Beverages" },
@@ -1060,56 +1304,20 @@ export default function ProductsAdminPage() {
               { value: "Foreign Cuisin", label: "Foreign Cuisin" },
               { value: "Deserts", label: "Deserts" },
             ].map((opt) => (
-              <option key={opt.label} value={opt.value}>
-                {opt.label}
-              </option>
+              <option key={opt.label} value={opt.value}>{opt.label}</option>
             ))}
           </Select>
-          <Input
-            placeholder="Price"
-            type="number"
-            min="0"
-            value={f.price}
-            onChange={(e) => setF({ ...f, price: e.target.value })}
-          />
-          <Input
-            placeholder="Promotion"
-            type="number"
-            min="0"
-            value={f.promotion}
-            onChange={(e) => setF({ ...f, promotion: e.target.value })}
-          />
-          <Input
-            placeholder="Spicy level 0–3"
-            type="number"
-            min="0"
-            max="3"
-            value={f.spicyLevel}
-            onChange={(e) => setF({ ...f, spicyLevel: e.target.value })}
-          />
-
+          <Input placeholder="Price" type="number" min="0" value={f.price} onChange={(e) => setF({ ...f, price: e.target.value })} />
+          <Input placeholder="Promotion" type="number" min="0" value={f.promotion} onChange={(e) => setF({ ...f, promotion: e.target.value })} />
+          <Input placeholder="Spicy level 0–3" type="number" min="0" max="3" value={f.spicyLevel} onChange={(e) => setF({ ...f, spicyLevel: e.target.value })} />
           <div className="sm:col-span-2">
-            <TextArea
-              placeholder="Description"
-              rows={3}
-              value={f.description}
-              onChange={(e) => setF({ ...f, description: e.target.value })}
-            />
+            <TextArea placeholder="Description" rows={3} value={f.description} onChange={(e) => setF({ ...f, description: e.target.value })} />
           </div>
           <div className="sm:col-span-2">
-            <TextArea
-              placeholder="Images (one URL per line)"
-              rows={3}
-              value={f.imagesText}
-              onChange={(e) => setF({ ...f, imagesText: e.target.value })}
-            />
+            <TextArea placeholder="Images (one URL per line)" rows={3} value={f.imagesText} onChange={(e) => setF({ ...f, imagesText: e.target.value })} />
           </div>
           <div className="sm:col-span-2">
-            <Input
-              placeholder="Tags (comma separated)"
-              value={f.tagsText}
-              onChange={(e) => setF({ ...f, tagsText: e.target.value })}
-            />
+            <Input placeholder="Tags (comma separated)" value={f.tagsText} onChange={(e) => setF({ ...f, tagsText: e.target.value })} />
           </div>
           <label className="flex items-center gap-2 text-sm sm:col-span-2">
             <input
@@ -1117,7 +1325,7 @@ export default function ProductsAdminPage() {
               className="h-4 w-4 rounded border-slate-300"
               checked={f.isSignatureToday}
               onChange={(e) => setF({ ...f, isSignatureToday: e.target.checked })}
-            />{" "}
+            />
             Signature today
           </label>
         </div>
@@ -1126,25 +1334,13 @@ export default function ProductsAdminPage() {
       {/* View Details Modal */}
       <Modal
         open={viewOpen}
-        onClose={() => {
-          setViewOpen(false);
-          setViewing(null);
-        }}
+        onClose={() => { setViewOpen(false); setViewing(null); }}
         title={viewing ? `Product • ${viewing.name}` : "Product"}
         footer={
           <>
-            <Button variant="outline" tone="neutral" onClick={() => setViewOpen(false)}>
-              Close
-            </Button>
+            <Button variant="outline" tone="neutral" onClick={() => setViewOpen(false)}>Close</Button>
             {viewing && (
-              <Button
-                variant="outline"
-                tone="neutral"
-                onClick={() => {
-                  setViewOpen(false);
-                  openEdit(viewing);
-                }}
-              >
+              <Button variant="outline" tone="neutral" onClick={() => { setViewOpen(false); openEdit(viewing); }}>
                 Edit This
               </Button>
             )}
@@ -1155,32 +1351,21 @@ export default function ProductsAdminPage() {
         {viewing && (
           <div className="grid gap-5 md:grid-cols-3">
             <div className="space-y-3">
-              {/* Main image */}
               <div className="aspect-square w-full overflow-hidden rounded-xl border bg-slate-50">
                 {viewing.images?.[0] ? (
                   // eslint-disable-next-line @next/next/no-img-element
-                  <img
-                    src={viewing.images[0]}
-                    alt={viewing.name}
-                    className="h-full w-full object-cover"
-                  />
+                  <img src={viewing.images[0]} alt={viewing.name} className="h-full w-full object-cover" />
                 ) : (
                   <div className="h-full w-full flex items-center justify-center text-slate-400 text-sm">
                     No image
                   </div>
                 )}
               </div>
-              {/* Thumbs */}
               {viewing.images && viewing.images.length > 1 && (
                 <div className="grid grid-cols-4 gap-2">
                   {viewing.images.slice(1, 5).map((src, i) => (
                     // eslint-disable-next-line @next/next/no-img-element
-                    <img
-                      key={i}
-                      src={src}
-                      alt={`${viewing.name}-${i + 2}`}
-                      className="aspect-square rounded-lg border object-cover"
-                    />
+                    <img key={i} src={src} alt={`${viewing.name}-${i + 2}`} className="aspect-square rounded-lg border object-cover" />
                   ))}
                 </div>
               )}
@@ -1200,9 +1385,7 @@ export default function ProductsAdminPage() {
                   </div>
                   {viewing.promotion > 0 && (
                     <>
-                      <div className="text-sm line-through text-slate-400">
-                        LKR {viewing.price.toFixed(2)}
-                      </div>
+                      <div className="text-sm line-through text-slate-400">LKR {viewing.price.toFixed(2)}</div>
                       <div className="text-sm text-emerald-700">− LKR {viewing.promotion.toFixed(2)}</div>
                     </>
                   )}
@@ -1220,10 +1403,7 @@ export default function ProductsAdminPage() {
                   <div className="text-sm font-medium text-slate-700 mb-1">Tags</div>
                   <div className="flex flex-wrap gap-2">
                     {viewing.tags.map((t, i) => (
-                      <span
-                        key={i}
-                        className="text-xs rounded-full bg-slate-100 border border-slate-200 px-2 py-0.5"
-                      >
+                      <span key={i} className="text-xs rounded-full bg-slate-100 border border-slate-200 px-2 py-0.5">
                         {t}
                       </span>
                     ))}
@@ -1242,7 +1422,6 @@ export default function ProductsAdminPage() {
 }
 
 /* =============================== Tiny Components =============================== */
-/** Plain KPI card with subtle left accent bar */
 function KPI({
   title,
   value,
