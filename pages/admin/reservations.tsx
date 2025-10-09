@@ -1,8 +1,10 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import useSWR from "swr";
 import { useMemo, useState } from "react";
-import DashboardLayout from "../components/DashboardLayout"; // ✅ same layout as Products
-import AdminGuard from "../components/AdminGuard"
+import DashboardLayout from "../components/DashboardLayout";
+import AdminGuard from "../components/AdminGuard";
+import { generateReservationReport } from "../components/reservations/generateReservationReport";
+
 
 // ---------- utils ----------
 const fetcher = async (url: string) => {
@@ -10,11 +12,13 @@ const fetcher = async (url: string) => {
   if (!r.ok) throw new Error(await r.text());
   return r.json();
 };
+
 const fmt = new Intl.NumberFormat("en-LK", {
   style: "currency",
   currency: "LKR",
   maximumFractionDigits: 2,
 });
+
 const today = () => {
   const d = new Date();
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(
@@ -48,6 +52,7 @@ function Button({
     </button>
   );
 }
+
 function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
   return (
     <input
@@ -58,6 +63,7 @@ function Input(props: React.InputHTMLAttributes<HTMLInputElement>) {
     />
   );
 }
+
 function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
   return (
     <select
@@ -68,6 +74,7 @@ function Select(props: React.SelectHTMLAttributes<HTMLSelectElement>) {
     />
   );
 }
+
 function Modal({
   open,
   onClose,
@@ -105,6 +112,7 @@ function Modal({
     </div>
   );
 }
+
 function StatCard({ title, value }: { title: string; value: string | number }) {
   return (
     <div className="bg-white rounded-xl shadow p-4">
@@ -148,10 +156,11 @@ export default function ReservationAdminPage() {
     return { total, confirmed, cancelled, revenue };
   }, [list]);
 
-  // modal state
   const [isOpen, setOpen] = useState(false);
+  const [editing, setEditing] = useState<Reservation | null>(null);
   const [busy, setBusy] = useState(false);
 
+  // -------- CRUD --------
   async function addReservation(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const fd = new FormData(e.currentTarget);
@@ -199,165 +208,302 @@ export default function ReservationAdminPage() {
     mutate();
   }
 
+  // ---------- UI ----------
   return (
     <AdminGuard>
-    <DashboardLayout>
-      {/* Header */}
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold">Reservation Management</h1>
-          <p className="text-sm text-neutral-500">
-            Track table bookings and payments
-          </p>
-        </div>
-        <Button onClick={() => setOpen(true)}>+ New Reservation</Button>
-      </div>
-
-      {/* Stats */}
-      <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4 mb-8">
-        <StatCard title="Total Reservations" value={stats.total} />
-        <StatCard title="Confirmed" value={stats.confirmed} />
-        <StatCard title="Cancelled" value={stats.cancelled} />
-        <StatCard title="Revenue" value={fmt.format(stats.revenue)} />
-      </div>
-
-      {/* Table */}
-      <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
-        <table className="w-full text-sm">
-          <thead className="bg-neutral-50 text-neutral-600">
-            <tr>
-              <th className="px-4 py-2 text-left">Date</th>
-              <th className="px-4 py-2">Slot</th>
-              <th className="px-4 py-2">Name</th>
-              <th className="px-4 py-2">Party</th>
-              <th className="px-4 py-2">Status</th>
-              <th className="px-4 py-2">Payment</th>
-              <th className="px-4 py-2">Method</th>
-              <th className="px-4 py-2">Amount</th>
-              <th className="px-4 py-2">Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {list.map((r) => (
-              <tr key={r._id} className="border-t">
-                <td className="px-4 py-3">{r.date}</td>
-                <td className="px-4 py-3">{r.slot}</td>
-                <td className="px-4 py-3">{r.name}</td>
-                <td className="px-4 py-3">{r.partySize}</td>
-                <td className="px-4 py-3">
-                  <Select
-                    value={r.status}
-                    onChange={(e) =>
-                      updateReservation(r._id, { status: e.target.value })
-                    }
-                  >
-                    <option value="confirmed">Confirmed</option>
-                    <option value="cancelled">Cancelled</option>
-                  </Select>
-                </td>
-                <td className="px-4 py-3">
-                  <Select
-                    value={r.paymentStatus}
-                    onChange={(e) =>
-                      updateReservation(r._id, {
-                        paymentStatus: e.target.value,
-                      })
-                    }
-                  >
-                    <option value="pending">Pending</option>
-                    <option value="paid">Paid</option>
-                    <option value="unpaid">Unpaid</option>
-                  </Select>
-                </td>
-                <td className="px-4 py-3">{r.paymentMethod || "-"}</td>
-                <td className="px-4 py-3">{fmt.format(r.amount || 0)}</td>
-                <td className="px-4 py-3 text-right">
-                  <Button
-                    tone="danger"
-                    onClick={() => deleteReservation(r._id)}
-                  >
-                    Delete
-                  </Button>
-                </td>
-              </tr>
-            ))}
-            {list.length === 0 && (
-              <tr>
-                <td colSpan={9} className="p-6 text-center text-neutral-500">
-                  No reservations yet
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </div>
-
-      {/* Create Modal */}
-      <Modal
-        open={isOpen}
-        onClose={() => setOpen(false)}
-        title="Create Reservation"
-        footer={
-          <>
-            <Button tone="ghost" onClick={() => setOpen(false)}>
-              Cancel
-            </Button>
+      <DashboardLayout>
+        {/* Header */}
+        <div className="mb-6 flex items-center justify-between">
+          <div>
+            <h1 className="text-2xl font-bold">Reservation Management</h1>
+            <p className="text-sm text-neutral-500">
+              Track table bookings and payments
+            </p>
+          </div>
+          <div className="flex gap-2">
+            <Button onClick={() => setOpen(true)}>+ New Reservation</Button>
             <Button
+              tone="ghost"
               onClick={() =>
-                (
-                  document.getElementById("resForm") as HTMLFormElement
-                )?.requestSubmit()
+                generateReservationReport({ reservations: list, fmt })
               }
-              disabled={busy}
             >
-              Save
+              Download Report
             </Button>
-          </>
-        }
-      >
-        <form
-          id="resForm"
-          onSubmit={addReservation}
-          className="grid gap-3 sm:grid-cols-2"
+          </div>
+        </div>
+
+        {/* Stats */}
+        <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4 mb-8">
+          <StatCard title="Total Reservations" value={stats.total} />
+          <StatCard title="Confirmed" value={stats.confirmed} />
+          <StatCard title="Cancelled" value={stats.cancelled} />
+          <StatCard title="Revenue" value={fmt.format(stats.revenue)} />
+        </div>
+
+        {/* Table */}
+        <div className="overflow-hidden rounded-xl border bg-white shadow-sm">
+          <table className="w-full text-sm">
+            <thead className="bg-neutral-50 text-neutral-600">
+              <tr>
+                <th className="px-4 py-2 text-left">Date</th>
+                <th className="px-4 py-2">Slot</th>
+                <th className="px-4 py-2">Name</th>
+                <th className="px-4 py-2">Party</th>
+                <th className="px-4 py-2">Status</th>
+                <th className="px-4 py-2">Payment</th>
+                <th className="px-4 py-2">Method</th>
+                <th className="px-4 py-2">Amount</th>
+                <th className="px-4 py-2">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {list.map((r) => (
+                <tr key={r._id} className="border-t">
+                  <td className="px-4 py-3">{r.date}</td>
+                  <td className="px-4 py-3">{r.slot}</td>
+                  <td className="px-4 py-3">{r.name}</td>
+                  <td className="px-4 py-3">{r.partySize}</td>
+                  <td className="px-4 py-3">
+                    <Select
+                      value={r.status}
+                      onChange={(e) =>
+                        updateReservation(r._id, { status: e.target.value })
+                      }
+                    >
+                      <option value="confirmed">Confirmed</option>
+                      <option value="cancelled">Cancelled</option>
+                    </Select>
+                  </td>
+                  <td className="px-4 py-3">
+                    <Select
+                      value={r.paymentStatus}
+                      onChange={(e) =>
+                        updateReservation(r._id, {
+                          paymentStatus: e.target.value,
+                        })
+                      }
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="paid">Paid</option>
+                      <option value="unpaid">Unpaid</option>
+                    </Select>
+                  </td>
+                  <td className="px-4 py-3">{r.paymentMethod || "-"}</td>
+                  <td className="px-4 py-3">{fmt.format(r.amount || 0)}</td>
+                  <td className="px-4 py-3 text-right space-x-2">
+                    <Button tone="ghost" onClick={() => setEditing(r)}>
+                      Edit
+                    </Button>
+                    <Button
+                      tone="danger"
+                      onClick={() => deleteReservation(r._id)}
+                    >
+                      Delete
+                    </Button>
+                  </td>
+                </tr>
+              ))}
+              {list.length === 0 && (
+                <tr>
+                  <td colSpan={9} className="p-6 text-center text-neutral-500">
+                    No reservations yet
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+
+        {/* Create Modal */}
+        <Modal
+          open={isOpen}
+          onClose={() => setOpen(false)}
+          title="Create Reservation"
+          footer={
+            <>
+              <Button tone="ghost" onClick={() => setOpen(false)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() =>
+                  (
+                    document.getElementById("resForm") as HTMLFormElement
+                  )?.requestSubmit()
+                }
+                disabled={busy}
+              >
+                Save
+              </Button>
+            </>
+          }
         >
-          <Input name="name" placeholder="Name" required />
-          <Input name="email" placeholder="Email" required />
-          <Input name="phone" placeholder="Phone" />
-          <Input type="date" name="date" defaultValue={today()} required />
-          <Input type="time" name="slot" required />
-          <Input
-            type="number"
-            name="partySize"
-            placeholder="Party Size"
-            min={1}
-            max={100}
-            required
-          />
-          <Input
-            type="number"
-            name="amount"
-            placeholder="Amount (LKR)"
-            min={0}
-          />
-          <Select name="paymentMethod">
-            <option value="">Method</option>
-            <option value="cash">Cash</option>
-            <option value="card">Card</option>
-            <option value="online">Online</option>
-          </Select>
-          <Select name="paymentStatus" defaultValue="pending">
-            <option value="pending">Pending</option>
-            <option value="paid">Paid</option>
-            <option value="unpaid">Unpaid</option>
-          </Select>
-          <Input
-            name="notes"
-            placeholder="Notes (optional)"
-            className="sm:col-span-2"
-          />
-        </form>
-      </Modal>
-    </DashboardLayout>
+          <form
+            id="resForm"
+            onSubmit={addReservation}
+            className="grid gap-3 sm:grid-cols-2"
+          >
+            <Input name="name" placeholder="Name" required />
+            <Input name="email" placeholder="Email" required />
+            <Input name="phone" placeholder="Phone" />
+            <Input type="date" name="date" defaultValue={today()} required />
+            <Input type="time" name="slot" required />
+            <Input
+              type="number"
+              name="partySize"
+              placeholder="Party Size"
+              min={1}
+              max={100}
+              required
+            />
+            <Input
+              type="number"
+              name="amount"
+              placeholder="Amount (LKR)"
+              min={0}
+            />
+            <Select name="paymentMethod">
+              <option value="">Method</option>
+              <option value="cash">Cash</option>
+              <option value="card">Card</option>
+              <option value="online">Online</option>
+            </Select>
+            <Select name="paymentStatus" defaultValue="pending">
+              <option value="pending">Pending</option>
+              <option value="paid">Paid</option>
+              <option value="unpaid">Unpaid</option>
+            </Select>
+            <Input
+              name="notes"
+              placeholder="Notes (optional)"
+              className="sm:col-span-2"
+            />
+          </form>
+        </Modal>
+
+        {/* Edit Modal */}
+        <Modal
+          open={!!editing}
+          onClose={() => setEditing(null)}
+          title="Edit Reservation"
+          footer={
+            <>
+              <Button tone="ghost" onClick={() => setEditing(null)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() =>
+                  (
+                    document.getElementById("editForm") as HTMLFormElement
+                  )?.requestSubmit()
+                }
+                disabled={busy}
+              >
+                Save Changes
+              </Button>
+            </>
+          }
+        >
+          {editing && (
+            <form
+              id="editForm"
+              onSubmit={async (e) => {
+                e.preventDefault();
+                const fd = new FormData(e.currentTarget);
+                const updates = {
+                  name: fd.get("name")?.toString() || "",
+                  email: fd.get("email")?.toString() || "",
+                  phone: fd.get("phone")?.toString() || "",
+                  date: fd.get("date")?.toString() || "",
+                  slot: fd.get("slot")?.toString() || "",
+                  partySize: Number(fd.get("partySize") || 0),
+                  amount: Number(fd.get("amount") || 0),
+                  paymentMethod: fd.get("paymentMethod")?.toString() || "",
+                  paymentStatus:
+                    fd.get("paymentStatus")?.toString() || "pending",
+                  status: fd.get("status")?.toString() || "confirmed",
+                  notes: fd.get("notes")?.toString() || "",
+                };
+                setBusy(true);
+                await updateReservation(editing._id, updates);
+                setBusy(false);
+                setEditing(null);
+              }}
+              className="grid gap-3 sm:grid-cols-2"
+            >
+              <Input
+                name="name"
+                defaultValue={editing.name}
+                placeholder="Name"
+                required
+              />
+              <Input
+                name="email"
+                defaultValue={editing.email}
+                placeholder="Email"
+                required
+              />
+              <Input
+                name="phone"
+                defaultValue={editing.phone}
+                placeholder="Phone"
+              />
+              <Input
+                type="date"
+                name="date"
+                defaultValue={editing.date}
+                required
+              />
+              <Input
+                type="time"
+                name="slot"
+                defaultValue={editing.slot}
+                required
+              />
+              <Input
+                type="number"
+                name="partySize"
+                defaultValue={editing.partySize}
+                placeholder="Party Size"
+                min={1}
+                max={100}
+                required
+              />
+              <Input
+                type="number"
+                name="amount"
+                defaultValue={editing.amount}
+                placeholder="Amount (LKR)"
+                min={0}
+              />
+              <Select
+                name="paymentMethod"
+                defaultValue={editing.paymentMethod || ""}
+              >
+                <option value="">Method</option>
+                <option value="cash">Cash</option>
+                <option value="card">Card</option>
+                <option value="online">Online</option>
+              </Select>
+              <Select name="paymentStatus" defaultValue={editing.paymentStatus}>
+                <option value="pending">Pending</option>
+                <option value="paid">Paid</option>
+                <option value="unpaid">Unpaid</option>
+              </Select>
+              <Select name="status" defaultValue={editing.status}>
+                <option value="confirmed">Confirmed</option>
+                <option value="cancelled">Cancelled</option>
+              </Select>
+              <Input
+                name="notes"
+                defaultValue={editing.notes}
+                placeholder="Notes (optional)"
+                className="sm:col-span-2"
+              />
+            </form>
+          )}
+        </Modal>
+      </DashboardLayout>
     </AdminGuard>
   );
 }
