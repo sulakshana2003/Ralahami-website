@@ -19,7 +19,7 @@ import MovementsTable from "../../src/components/inventory/MovementsTable";
 import Chart from "chart.js/auto";
 
 
-import { Item, Movement } from "../types/inventory";
+import { Item, Movement } from "../../src/types/inventory";
 import { generateInventoryReport } from "../../src/components/inventory/report";
 
 const fetcher = async (url: string) => {

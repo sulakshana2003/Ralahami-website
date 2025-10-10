@@ -1,7 +1,7 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 "use client";
 
-import { Item, Movement } from "../../../pages/types/inventory";
+import { Item, Movement } from "../../types/inventory";
 
 function safe(s: any) {
   return String(s ?? "").replace(/[&<>"']/g, (c) => (
