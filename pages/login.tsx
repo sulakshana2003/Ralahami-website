@@ -17,6 +17,8 @@ export default function LoginPage() {
   const { update } = useSession();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [showPassword, setShowPassword] = useState(false);
+
 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -158,6 +160,7 @@ export default function LoginPage() {
                   </div>
 
                   {/* Password */}
+                  {/* Password */}
                   <div className="relative">
                     <label htmlFor="password" className="sr-only">
                       Password
@@ -167,19 +170,32 @@ export default function LoginPage() {
                     </span>
                     <input
                       id="password"
-                      type="password"
+                      type={showPassword ? "text" : "password"}
                       placeholder="Password"
-                      className="h-14 w-full rounded-full border-2 border-stone-300 bg-white pl-12 pr-5 text-sm text-stone-900 placeholder:text-stone-400 outline-none transition focus:border-amber-500"
+                      className="h-14 w-full rounded-full border-2 border-stone-300 bg-white pl-12 pr-12 text-sm text-stone-900 placeholder:text-stone-400 outline-none transition focus:border-amber-500"
                       value={password}
                       onChange={(e) => setPassword(e.target.value)}
                       autoComplete="current-password"
                       required
                     />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-4 top-1/2 -translate-y-1/2 text-stone-500 hover:text-amber-600"
+                      aria-label={
+                        showPassword ? "Hide password" : "Show password"
+                      }
+                    >
+                      {showPassword ? "🙈" : "👁️"}
+                    </button>
                   </div>
 
                   {/* Forgot Password */}
                   <div className="text-center text-sm text-stone-600">
-                    <Link href="/reset-password" className="font-semibold text-amber-700 hover:text-amber-800">
+                    <Link
+                      href="/reset-password"
+                      className="font-semibold text-amber-700 hover:text-amber-800"
+                    >
                       Forgot Password?
                     </Link>
                   </div>
