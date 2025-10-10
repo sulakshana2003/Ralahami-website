@@ -1,28 +1,18 @@
-// components/AdminGuard.tsx
-import { useSession, signIn } from "next-auth/react";
+import { signIn, useSession } from "next-auth/react";
 import { useEffect } from "react";
 
-export default function AdminGuard({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const { data: session, status } = useSession();
+function AdminGuard({ children }: { children: React.ReactNode }) {
+  const { status, data: session } = useSession();
 
   useEffect(() => {
-    if (status === "unauthenticated") {
-      // Not logged in → send to login page
-      signIn();
-    }
+    if (status === "unauthenticated") signIn();
   }, [status]);
 
-  if (status === "loading") return <p>Checking authentication…</p>;
+  if (status === "loading") return <div className="p-6">Loading session…</div>;
+  if (status === "authenticated" && session?.user?.role !== "admin")
+    return <div className="p-6 text-red-600">Access denied: Admins only</div>;
 
-  // If user exists but is not an admin
-  if (!session?.user || session.user.role !== "admin") {
-    return <p className="text-center text-red-600 mt-10">Access denied</p>;
-  }
-
-  // ✅ Admin is signed in
   return <>{children}</>;
 }
+
+export default AdminGuard;

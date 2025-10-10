@@ -4,7 +4,7 @@
 import React, { useEffect, useMemo, useRef, useState, forwardRef } from "react";
 import useSWR from "swr";
 import { useSession, signIn } from "next-auth/react";
-import DashboardLayout from "../components/DashboardLayout";
+import DashboardLayout from "../../src/components/DashboardLayout";
 
 /* ---------- PDF ---------- */
 import jsPDF from "jspdf";

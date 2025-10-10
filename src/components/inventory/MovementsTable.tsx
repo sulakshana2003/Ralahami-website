@@ -1,7 +1,7 @@
 "use client";
 import React from "react";
 import { Button, Input, Select } from "./ui";
-import { Item, Movement } from "../../types/inventory";
+import { Item, Movement } from "../../../pages/types/inventory";
 
 export default function MovementsTable({
   from,

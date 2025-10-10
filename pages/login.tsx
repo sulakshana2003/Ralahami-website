@@ -8,8 +8,8 @@ import { signIn, useSession } from "next-auth/react";
 import { getServerSession } from "next-auth";
 import { authOptions } from "./api/auth/[...nextauth]";
 import type { GetServerSidePropsContext } from "next";
-import Navbar from "./components/Navbar";
-import Footer from "./components/Footer";
+import Navbar from "../src/components/Navbar";
+import Footer from "../src/components/Footer";
 import { motion } from "framer-motion"; // 👈 animation
 
 export default function LoginPage() {

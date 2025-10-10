@@ -1,9 +1,9 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
 import useSWR from "swr";
 import { useMemo, useState } from "react";
-import DashboardLayout from "../components/DashboardLayout";
-import AdminGuard from "../components/AdminGuard";
-import { generateReservationReport } from "../components/reservations/_generateReservationReport";
+import DashboardLayout from "../../src/components/DashboardLayout";
+import AdminGuard from "../../src/components/AdminGuard";
+import { generateReservationReport } from "../../src/components/reservations/_generateReservationReport";
 
 
 // ---------- utils ----------

@@ -1,7 +1,7 @@
 "use client";
 import React from "react";
 import { Button, Input, Select } from "./ui";
-import { Item } from "../../types/inventory";
+import { Item } from "../../../pages/types/inventory";
 
 const categories = [
   "Fruits","Vegetables","Dairy","Beverages","Snacks",
