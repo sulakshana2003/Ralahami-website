@@ -3,7 +3,7 @@ import useSWR from "swr";
 import { useMemo, useState } from "react";
 import DashboardLayout from "../components/DashboardLayout";
 import AdminGuard from "../components/AdminGuard";
-import { generateReservationReport } from "../components/reservations/generateReservationReport";
+import { generateReservationReport } from "../components/reservations/_generateReservationReport";
 
 
 // ---------- utils ----------
