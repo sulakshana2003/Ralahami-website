@@ -4,6 +4,11 @@ import { useMemo, useState } from "react";
 import DashboardLayout from "../../src/components/DashboardLayout";
 import AdminGuard from "../../src/components/AdminGuard";
 import { generateReservationReport } from "../../src/components/reservations/_generateReservationReport";
+import {
+  ReservationsByDateBar,
+  PaymentStatusPie,
+  PaymentMethodDoughnut,
+} from "../../src/components/reservations/ReservationCharts";
 
 
 // ---------- utils ----------
@@ -232,13 +237,19 @@ export default function ReservationAdminPage() {
             </Button>
           </div>
         </div>
-
         {/* Stats */}
         <div className="grid gap-6 sm:grid-cols-2 lg:grid-cols-4 mb-8">
           <StatCard title="Total Reservations" value={stats.total} />
           <StatCard title="Confirmed" value={stats.confirmed} />
           <StatCard title="Cancelled" value={stats.cancelled} />
           <StatCard title="Revenue" value={fmt.format(stats.revenue)} />
+        </div>
+        <div>
+          <ReservationsByDateBar reservations={list} mode="count" />
+          <div>
+            <PaymentStatusPie reservations={list} />
+            <PaymentMethodDoughnut reservations={list} />
+          </div>
         </div>
 
         {/* Table */}
@@ -314,7 +325,6 @@ export default function ReservationAdminPage() {
             </tbody>
           </table>
         </div>
-
         {/* Create Modal */}
         <Modal
           open={isOpen}
