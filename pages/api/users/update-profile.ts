@@ -27,7 +27,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       return res.status(400).json({ message: "Name is required" });
     }
 
-    // --- Validate phone (optional) ---
+    // --- Validate phone  ---
     if (phone && phone.trim().length > 0) {
       // ✅ Accept +94 7XXXXXXXX or +947XXXXXXXX
       const phoneRegex = /^\+94\s?7\d{8}$/;

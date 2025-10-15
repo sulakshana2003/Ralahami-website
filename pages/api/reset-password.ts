@@ -8,8 +8,8 @@ import User from "@/models/User";
 const transporter = nodemailer.createTransport({
   service: "Gmail", // Or another email provider
   auth: {
-    user: process.env.EMAIL_USERNAME,   // Your email address
-    pass: process.env.EMAIL_PASSWORD,   // Your app password
+    user: process.env.EMAIL_USERNAME,   
+    pass: process.env.EMAIL_PASSWORD,   
   },
 });
 
@@ -42,7 +42,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     // Generate a unique reset token
     const resetToken = crypto.randomBytes(32).toString("hex");
     user.resetToken = resetToken;
-    user.resetTokenExpiry = Date.now() + 3600000; // Token is valid for 1 hour
+    user.resetTokenExpiry = Date.now() + 20 * 60 * 1000; // Token is valid for 20 minutes
     await user.save();
 
     // Send the reset email
