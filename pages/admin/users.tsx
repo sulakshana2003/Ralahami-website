@@ -4,7 +4,7 @@
 import { useEffect, useMemo, useState } from "react";
 import useSWR from "swr";
 import { useSession, signIn } from "next-auth/react";
-import DashboardLayout from "../components/DashboardLayout";
+import DashboardLayout from "../../src/components/DashboardLayout";
 
 // ---------- fetch helper ----------
 const fetcher = (url: string) =>

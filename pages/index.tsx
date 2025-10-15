@@ -4,13 +4,13 @@ import Head from "next/head"
 import Image from "next/image"
 import Link from "next/link"
 import { motion } from "framer-motion"
-import Navbar from "./components/Navbar"
-import AdminAutoRedirect from "./components/AdminAutoRedirect"
-import SignatureDishes from "./components/SignatureDishes"
-import Hero  from "./components/Hero";
-import Promotions from "./components/Promotions"
-import Aboutus from "./components/AboutUs"
-import Contact from "./components/ContactUs"
+import Navbar from "../src/components/Navbar"
+import AdminAutoRedirect from "../src/components/AdminAutoRedirect"
+import SignatureDishes from "../src/components/SignatureDishes"
+import Hero  from "../src/components/Hero";
+import Promotions from "../src/components/Promotions"
+import Aboutus from "../src/components/AboutUs"
+import Contact from "../src/components/ContactUs"
 
 // ---------- Helper ----------
 const Container = ({ children, className = "" }: { children: React.ReactNode; className?: string }) => (

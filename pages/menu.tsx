@@ -7,7 +7,7 @@ import Image from 'next/image'
 import Link from 'next/link'
 import { dbConnect } from '@/lib/db'
 import Product from '@/models/Product'
-import Navbar from './components/Navbar'
+import Navbar from '../src/components/Navbar'
 import ProductCard from '@/src/components/ProductCard'
 
 type ProductItem = {

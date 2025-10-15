@@ -4,23 +4,23 @@
 
 import useSWR from "swr";
 import { useMemo, useState } from "react";
-import DashboardLayout from "../components/DashboardLayout";
-import AdminGuard from "../components/AdminGuard";
-import BarChart from "../components/BarChart";
+import DashboardLayout from "../../src/components/DashboardLayout";
+import AdminGuard from "../../src/components/AdminGuard";
+import BarChart from "../../src/components/BarChart";
 
-import Header from "../components/inventory/Header";
-import Stats from "../components/inventory/Stats";
-import AddItemForm from "../components/inventory/AddItemForm";
-import ItemsTable from "../components/inventory/ItemsTable";
-import EditModal from "../components/inventory/EditModal";
-import LowStock from "../components/inventory/LowStock";
-import MovementForm from "../components/inventory/MovementForm";
-import MovementsTable from "../components/inventory/MovementsTable";
+import Header from "../../src/components/inventory/Header";
+import Stats from "../../src/components/inventory/Stats";
+import AddItemForm from "../../src/components/inventory/AddItemForm";
+import ItemsTable from "../../src/components/inventory/ItemsTable";
+import EditModal from "../../src/components/inventory/EditModal";
+import LowStock from "../../src/components/inventory/LowStock";
+import MovementForm from "../../src/components/inventory/MovementForm";
+import MovementsTable from "../../src/components/inventory/MovementsTable";
 import Chart from "chart.js/auto";
 
 
-import { Item, Movement } from "../types/inventory";
-import { generateInventoryReport } from "../components/inventory/report";
+import { Item, Movement } from "../../src/types/inventory";
+import { generateInventoryReport } from "../../src/components/inventory/report";
 
 const fetcher = async (url: string) => {
   const r = await fetch(url, { credentials: "same-origin" });

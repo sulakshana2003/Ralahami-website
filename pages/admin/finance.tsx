@@ -1,18 +1,18 @@
 "use client";
 
 import { useState } from "react";
-import DashboardLayout from "../components/DashboardLayout";
-import AdminGuard from "../components/AdminGuard";
-import { generateFinanceReport } from "../components/finance/FinanceReportGenerator";
-import { fetchFinanceData } from "../components/finance/fetchFinanceData";
-import FinanceOverview from "../components/finance/FinanceOverview";
-import InventoryFinance from "../components/finance/InventoryFinance";
-import EmployeeFinance from "../components/finance/EmployeeFinance";
-import PayrollRecords from "../components/finance/PayrollRecords";
-import ReservationFinance from "../components/finance/ReservationFinance";
-import FinanceCharts from "../components/finance/FinanceCharts";
-import PromotionManager from "../components/finance/PromotionManager";
-import FinanceStats from "../components/finance/FinanceStats";
+import DashboardLayout from "../../src/components/DashboardLayout";
+import AdminGuard from "../../src/components/AdminGuard";
+import { generateFinanceReport } from "../../src/components/finance/FinanceReportGenerator";
+import { fetchFinanceData } from "../../src/components/finance/fetchFinanceData";
+import FinanceOverview from "../../src/components/finance/FinanceOverview";
+import InventoryFinance from "../../src/components/finance/InventoryFinance";
+import EmployeeFinance from "../../src/components/finance/EmployeeFinance";
+import PayrollRecords from "../../src/components/finance/PayrollRecords";
+import ReservationFinance from "../../src/components/finance/ReservationFinance";
+import FinanceCharts from "../../src/components/finance/FinanceCharts";
+import PromotionManager from "../../src/components/finance/PromotionManager";
+import FinanceStats from "../../src/components/finance/FinanceStats";
 
 export default function FinancePage() {
   const [filter, setFilter] = useState("All");
