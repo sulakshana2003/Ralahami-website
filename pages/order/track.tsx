@@ -1,7 +1,11 @@
 // pages/order/track.tsx
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import Navbar from "../components/Navbar";
 
+<>
+<Navbar/>
+</>
 type Item = { name: string; qty: number; unitPrice: number; lineTotal: number };
 type OrderPayload = {
   orderId: string;
