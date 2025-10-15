@@ -30,7 +30,7 @@ const Navbar: React.FC = () => {
       bgColor: "#170D27",
       textColor: "#fff",
       links: [
-        { label: "Promotions", href: "/#promotions", ariaLabel: "View promotions" },
+        { label: "Our Staff", href: "/ourStaff", ariaLabel: "View promotions" },
         { label: `Cart (${totalItems})`, href: "/cart", ariaLabel: "View cart" },
       ],
     },
