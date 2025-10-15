@@ -3,9 +3,12 @@ import useSWR from "swr";
 import { useMemo, useState } from "react";
 import DashboardLayout from "../components/DashboardLayout";
 import AdminGuard from "../components/AdminGuard";
-import { generateReservationReport } from "../components/reservations/generateReservationReport";
-
-
+import { generateReservationReport } from "../components/reservations/_generateReservationReport";
+import {
+  ReservationsByDateBar,
+  PaymentStatusPie,
+  PaymentMethodDoughnut,
+} from "../components/reservations/ReservationCharts";
 // ---------- utils ----------
 const fetcher = async (url: string) => {
   const r = await fetch(url, { credentials: "same-origin" });
@@ -239,6 +242,13 @@ export default function ReservationAdminPage() {
           <StatCard title="Confirmed" value={stats.confirmed} />
           <StatCard title="Cancelled" value={stats.cancelled} />
           <StatCard title="Revenue" value={fmt.format(stats.revenue)} />
+        </div>
+        <div>
+          <ReservationsByDateBar reservations={list} mode="count" />
+          <div>
+            <PaymentStatusPie reservations={list} />
+            <PaymentMethodDoughnut reservations={list} />
+          </div>
         </div>
 
         {/* Table */}

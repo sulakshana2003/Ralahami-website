@@ -1,3 +1,4 @@
+/* eslint-disable @typescript-eslint/no-explicit-any */
 // pages/api/auth/[...nextauth].ts
 import NextAuth, { type NextAuthOptions } from 'next-auth'
 import Credentials from 'next-auth/providers/credentials'
