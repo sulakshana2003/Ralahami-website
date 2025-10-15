@@ -40,7 +40,14 @@ const staffData: StaffMember[] = [
     name: 'Priya Kumari',
     position: 'Cashier',
     imageUrl: 'https://www.shutterstock.com/image-photo/head-shot-portrait-successful-multiracial-600nw-1364480012.jpg',
-    bio: 'Priya is our dedicated cashier making your order placements fast and hassle free.',
+    bio: 'Ms Priya is our dedicated cashier making your order placements fast and hassle free.',
+  },
+  {
+    id: 5,
+    name: 'Saman Wijerathne',
+    position: 'Manager',
+    imageUrl: 'https://www.srilankan.com/images/news/ASHOK_PATHIRAGE.jpg',
+    bio: 'Mr Saman is our dedicated manager, overseeing all operations to ensure your experience is seamless and enjoyable..',
   },
 ];
 
