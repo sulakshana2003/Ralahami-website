@@ -1,233 +1,318 @@
-// pages/order/confirmation.tsx
-import { useCallback, useEffect, useMemo, useState } from "react";
+/* eslint-disable @typescript-eslint/no-explicit-any */
+import Head from "next/head";
 import Link from "next/link";
+import Image from "next/image";
+import dynamic from "next/dynamic";
+import { useRouter } from "next/router";
+import { useEffect, useMemo, useRef, useState } from "react";
 
-type Item = { name: string; qty: number; unitPrice: number; lineTotal: number };
-type OrderPayload = {
+// Lazy-load QR renderer only in the browser
+const QRCodeCanvas = dynamic(async () => (await import("qrcode.react")).QRCodeCanvas, {
+  ssr: false,
+});
+
+/* ----------------------------- Types ----------------------------- */
+type Line = { name: string; qty: number; unitPrice: number; lineTotal: number };
+
+type NormalizedOrder = {
   orderId: string;
-  status: "confirmed" | "preparing" | "ready" | "completed" | "cancelled" | string;
+  status: string;
   revenue: number;
   cost: number;
   date: string; // YYYY-MM-DD
-  items: Item[];
+  items: Line[];
   customer?: { name?: string; email?: string; phone?: string };
-  fulfilment?: any;
   note?: string;
-  qrDataUrl: string;
+  // trackUrl may not always be returned, so we compute a fallback
+  trackUrl?: string;
 };
 
-export default function OrderConfirmationPage() {
-  const [loading, setLoading] = useState(true);
-  const [err, setErr] = useState<string | null>(null);
-  const [order, setOrder] = useState<OrderPayload | null>(null);
+const fmt = new Intl.NumberFormat("en-LK", {
+  style: "currency",
+  currency: "LKR",
+  maximumFractionDigits: 0,
+});
+const rs = (n?: number) => fmt.format(Math.round(n ?? 0));
 
-  const qs = useMemo(() => new URLSearchParams(typeof window !== "undefined" ? window.location.search : ""), []);
-  const session_id = qs.get("session_id");
-  const orderId = qs.get("orderId");
+const STATUS_COLORS: Record<string, string> = {
+  confirmed:
+    "bg-emerald-50 text-emerald-700 ring-1 ring-emerald-200 dark:bg-emerald-500/10 dark:text-emerald-300 dark:ring-emerald-500/30",
+  preparing:
+    "bg-amber-50 text-amber-700 ring-1 ring-amber-200 dark:bg-amber-500/10 dark:text-amber-300 dark:ring-amber-500/30",
+  ready:
+    "bg-sky-50 text-sky-700 ring-1 ring-sky-200 dark:bg-sky-500/10 dark:text-sky-300 dark:ring-sky-500/30",
+  completed:
+    "bg-gray-50 text-gray-700 ring-1 ring-gray-200 dark:bg-gray-500/10 dark:text-gray-300 dark:ring-gray-500/30",
+  cancelled:
+    "bg-rose-50 text-rose-700 ring-1 ring-rose-200 dark:bg-rose-500/10 dark:text-rose-300 dark:ring-rose-500/30",
+};
 
-  const fetchOrder = useCallback(async () => {
-    if (!session_id && !orderId) {
-      setErr("Missing order identifier.");
-      setLoading(false);
-      return;
-    }
-    try {
-      setLoading(true);
-      const query = session_id
-        ? `session_id=${encodeURIComponent(session_id)}`
-        : `orderId=${encodeURIComponent(orderId!)}`;
-      const res = await fetch(`/api/orders/confirm?${query}`, { cache: "no-store" });
-      const json = await res.json();
-      if (!res.ok) {
-        setErr(json?.error || "Failed to load order.");
-        setOrder(null);
-      } else {
-        setErr(null);
-        setOrder(json.order as OrderPayload);
-      }
-    } catch (e: any) {
-      setErr(e?.message || "Failed to load order.");
-      setOrder(null);
-    } finally {
-      setLoading(false);
-    }
-  }, [session_id, orderId]);
-
-  useEffect(() => {
-    fetchOrder();
-  }, [fetchOrder]);
-
-  // (Optional) auto-refresh every 20s so the user sees updates after kitchen changes status
-  useEffect(() => {
-    const id = setInterval(() => fetchOrder(), 20000);
-    return () => clearInterval(id);
-  }, [fetchOrder]);
-
-  const totalQty = useMemo(() => {
-    return order?.items?.reduce((s, i) => s + (i.qty || 0), 0) ?? 0;
-  }, [order]);
-
-  const statusChip = (s: string) => {
-    const tone =
-      s === "ready" ? "bg-green-100 text-green-800"
-      : s === "preparing" ? "bg-amber-100 text-amber-800"
-      : s === "completed" ? "bg-blue-100 text-blue-800"
-      : s === "cancelled" ? "bg-red-100 text-red-800"
-      : "bg-neutral-100 text-neutral-800";
-    const label = s?.charAt(0)?.toUpperCase() + s?.slice(1);
-    return <span className={`rounded-full px-3 py-1 text-xs font-medium ${tone}`}>{label || "Confirmed"}</span>;
+/* ----------------------------- Page ------------------------------ */
+export default function OrderConfirmPage() {
+  const router = useRouter();
+  const { session_id, orderId: orderIdQ } = router.query as {
+    session_id?: string;
+    orderId?: string;
   };
 
-  if (loading) {
-    return (
-      <div className="min-h-screen bg-neutral-50">
-        <div className="mx-auto max-w-3xl px-6 py-24">
-          <div className="h-10 w-40 animate-pulse rounded bg-neutral-200" />
-          <div className="mt-6 h-24 animate-pulse rounded-xl bg-neutral-200" />
-        </div>
-      </div>
-    );
-  }
+  const [order, setOrder] = useState<NormalizedOrder | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [polling, setPolling] = useState(false);
+  const pollRef = useRef<NodeJS.Timeout | null>(null);
 
-  if (err || !order) {
-    return (
-      <div className="min-h-screen bg-neutral-50">
-        <div className="mx-auto max-w-3xl px-6 py-24">
-          <h1 className="text-2xl font-semibold">Order confirmation</h1>
-          <p className="mt-3 text-red-600">Error: {err || "Unknown error"}</p>
-          <div className="mt-6 flex gap-2">
-            <button
-              onClick={() => location.reload()}
-              className="rounded-xl border border-neutral-300 bg-white px-4 py-2 text-sm hover:bg-neutral-100"
-            >
-              Refresh
-            </button>
-            <Link href="/" className="rounded-xl bg-black px-4 py-2 text-sm font-medium text-white hover:opacity-90">
-              Go home
-            </Link>
-          </div>
-        </div>
-      </div>
-    );
-  }
+  // First load: hit /api/orders/confirm (this also emails & stores DB if session_id present)
+  useEffect(() => {
+    if (!router.isReady) return;
+    const controller = new AbortController();
+
+    const run = async () => {
+      const p = new URLSearchParams();
+      if (session_id) p.set("session_id", session_id);
+      if (orderIdQ) p.set("orderId", orderIdQ);
+
+      if (![...p.keys()].length) {
+        setLoading(false);
+        return;
+      }
+
+      try {
+        const res = await fetch(`/api/orders/confirm?${p.toString()}`, { signal: controller.signal });
+        const data = await res.json();
+        if (!res.ok) throw new Error(data?.error || "Confirm failed");
+
+        const o: NormalizedOrder = data.order;
+        setOrder(o);
+      } catch (err) {
+        console.error(err);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    run();
+    return () => controller.abort();
+  }, [router.isReady, session_id, orderIdQ]);
+
+  const oid = order?.orderId ?? orderIdQ ?? "";
+  const trackUrl =
+    order?.trackUrl || `${process.env.NEXT_PUBLIC_HOST_URL || ""}/order/track?orderId=${encodeURIComponent(oid)}`;
+
+  // Poll public status every 5s (only when we have an orderId)
+  useEffect(() => {
+    if (!oid) return;
+    setPolling(true);
+
+    const tick = async () => {
+      try {
+        const res = await fetch(`/api/orders/public-status?orderId=${encodeURIComponent(oid)}`);
+        const data = await res.json();
+        if (res.ok) {
+          setOrder((prev) =>
+            prev
+              ? { ...prev, status: data.status, date: data.date ?? prev.date, revenue: data.revenue ?? prev.revenue }
+              : {
+                  orderId: oid,
+                  status: data.status,
+                  revenue: data.revenue,
+                  cost: data.cost,
+                  date: data.date,
+                  items: [],
+                }
+          );
+        }
+      } catch (e) {
+        // ignore transient errors; next tick will retry
+      }
+    };
+
+    tick();
+    pollRef.current = setInterval(tick, 5000);
+    return () => {
+      if (pollRef.current) clearInterval(pollRef.current);
+      setPolling(false);
+    };
+  }, [oid]);
+
+  const items = order?.items ?? [];
+  const totalQty = useMemo(() => items.reduce((s, i) => s + (Number(i.qty) || 0), 0), [items]);
 
   return (
-    <div className="min-h-screen bg-neutral-50 pb-16">
-      <div className="mx-auto max-w-3xl px-6 pt-14">
-        {/* Header */}
-        <div className="mb-8 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+    <>
+      <Head>
+        <title>Order confirmed</title>
+      </Head>
+
+      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+        <div className="flex items-start justify-between gap-4 mb-4">
           <div>
-            <h1 className="text-2xl font-semibold">Order confirmed 🎉</h1>
-            <p className="mt-1 text-sm text-neutral-600">
-              Save this page. You can refresh to see live status updates from our kitchen.
+            <h1 className="text-2xl font-semibold tracking-tight">Order confirmed 🎉</h1>
+            <p className="text-sm text-neutral-600">
+              Save this page. It will auto-update as we prepare your order.
             </p>
           </div>
+
           <div className="flex gap-2">
             <button
-              onClick={() => fetchOrder()}
-              className="rounded-xl border border-neutral-300 bg-white px-4 py-2 text-sm hover:bg-neutral-100"
+              onClick={() => router.reload()}
+              className="px-4 py-2 rounded-xl border border-neutral-300 hover:bg-neutral-50"
             >
               Refresh status
             </button>
             <Link
               href="/"
-              className="rounded-xl bg-black px-4 py-2 text-sm font-medium text-white hover:opacity-90"
+              className="px-4 py-2 rounded-xl bg-black text-white hover:bg-neutral-800"
             >
               Continue shopping
             </Link>
           </div>
         </div>
 
-        <div className="grid gap-6 md:grid-cols-[1.4fr_0.6fr]">
-          {/* Left: Details */}
-          <section className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-neutral-500">Order ID</p>
-                <p className="font-mono text-sm">{order.orderId}</p>
-              </div>
-              {statusChip(order.status || "confirmed")}
-            </div>
+        {/* Card + Aside */}
+        <div className="grid grid-cols-1 lg:grid-cols-[1fr,260px] gap-6">
+          {/* Main Card */}
+          <section className="rounded-2xl border border-neutral-200 bg-white/70 backdrop-blur p-4 sm:p-6">
+            {loading && <p className="text-neutral-500">Finalizing your order…</p>}
 
-            <div className="mt-4 grid gap-2 text-sm">
-              <div className="flex items-center justify-between">
-                <span className="text-neutral-600">Date</span>
-                <span>{order.date}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-neutral-600">Items</span>
-                <span>{totalQty}</span>
-              </div>
-              <div className="flex items-center justify-between">
-                <span className="text-neutral-600">Total paid</span>
-                <span className="font-semibold">Rs. {Math.round(order.revenue).toLocaleString()}</span>
-              </div>
-            </div>
+            {!loading && order && (
+              <>
+                {/* Meta */}
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-2 text-sm">
+                  <div className="col-span-2">
+                    <div className="text-neutral-500">Order ID</div>
+                    <div className="flex items-center gap-2">
+                      <code className="text-[13px] break-all">{order.orderId}</code>
+                      <span
+                        className={`px-2 py-0.5 rounded-full text-xs ring-1 ${
+                          STATUS_COLORS[order.status] || STATUS_COLORS.confirmed
+                        }`}
+                        title={polling ? "Auto-updating…" : "Idle"}
+                      >
+                        {order.status[0]?.toUpperCase()}
+                        {order.status.slice(1)}
+                      </span>
+                    </div>
+                  </div>
 
-            {/* Items table */}
-            <div className="mt-6 overflow-hidden rounded-xl border">
-              <table className="w-full text-sm">
-                <thead className="bg-neutral-50 text-neutral-600">
-                  <tr>
-                    <th className="px-3 py-2 text-left">Item</th>
-                    <th className="px-3 py-2 text-center">Qty</th>
-                    <th className="px-3 py-2 text-right">Price</th>
-                    <th className="px-3 py-2 text-right">Total</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {order.items.map((it, idx) => (
-                    <tr key={idx} className="border-t">
-                      <td className="px-3 py-2">{it.name}</td>
-                      <td className="px-3 py-2 text-center">{it.qty}</td>
-                      <td className="px-3 py-2 text-right">Rs. {it.unitPrice.toLocaleString()}</td>
-                      <td className="px-3 py-2 text-right">Rs. {it.lineTotal.toLocaleString()}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
+                  <div>
+                    <div className="text-neutral-500">Date</div>
+                    <div className="font-medium">{order.date}</div>
+                  </div>
 
-            {order.customer?.name || order.customer?.email || order.customer?.phone ? (
-              <div className="mt-6 grid gap-2 rounded-xl bg-neutral-50 p-4 text-sm">
-                <p className="font-medium">Customer</p>
-                {order.customer?.name ? <p>Name: {order.customer.name}</p> : null}
-                {order.customer?.email ? <p>Email: {order.customer.email}</p> : null}
-                {order.customer?.phone ? <p>Phone: {order.customer.phone}</p> : null}
-              </div>
-            ) : null}
+                  <div>
+                    <div className="text-neutral-500">Total paid</div>
+                    <div className="font-semibold">{rs(order.revenue)}</div>
+                  </div>
+                </div>
 
-            <div className="mt-6 flex gap-2">
-              <a
-                href={`/api/orders/receipt.pdf?orderId=${encodeURIComponent(order.orderId)}`}
-                className="rounded-xl border border-neutral-300 bg-white px-4 py-2 text-sm font-medium hover:bg-neutral-100"
-              >
-                Download receipt (PDF)
-              </a>
-              {/* Track button now just reloads this same page (no separate /track page) */}
-              <button
-                onClick={() => fetchOrder()}
-                className="rounded-xl bg-black px-4 py-2 text-sm font-medium text-white hover:opacity-90"
-              >
-                Refresh status
-              </button>
-            </div>
+                {/* Items Table */}
+                <div className="mt-4">
+                  <div className="overflow-x-auto rounded-2xl border border-neutral-200">
+                    <table className="min-w-full text-sm">
+                      <thead className="bg-neutral-50 text-neutral-700">
+                        <tr>
+                          <th className="text-left px-3 py-2">Item</th>
+                          <th className="text-right px-3 py-2">Qty</th>
+                          <th className="text-right px-3 py-2">Price</th>
+                          <th className="text-right px-3 py-2">Total</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {items.map((it, idx) => (
+                          <tr key={idx} className="border-t border-neutral-200">
+                            <td className="px-3 py-2">{it.name}</td>
+                            <td className="px-3 py-2 text-right">{it.qty}</td>
+                            <td className="px-3 py-2 text-right">{rs(it.unitPrice)}</td>
+                            <td className="px-3 py-2 text-right font-medium">{rs(it.lineTotal)}</td>
+                          </tr>
+                        ))}
+                        <tr className="border-t border-neutral-200 bg-neutral-50">
+                          <td className="px-3 py-2 font-medium">Total</td>
+                          <td className="px-3 py-2 text-right font-medium">{totalQty}</td>
+                          <td></td>
+                          <td className="px-3 py-2 text-right font-semibold">{rs(order.revenue)}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+
+                {/* Customer */}
+                {(order.customer?.name || order.customer?.email || order.customer?.phone) && (
+                  <div className="mt-4 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+                    <div className="text-sm font-medium mb-2">Customer</div>
+                    {order.customer?.name && (
+                      <div className="text-sm">
+                        <span className="text-neutral-500">Name: </span>
+                        {order.customer.name}
+                      </div>
+                    )}
+                    {order.customer?.email && (
+                      <div className="text-sm">
+                        <span className="text-neutral-500">Email: </span>
+                        {order.customer.email}
+                      </div>
+                    )}
+                    {order.customer?.phone && (
+                      <div className="text-sm">
+                        <span className="text-neutral-500">Phone: </span>
+                        {order.customer.phone}
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                {/* Actions */}
+                <div className="mt-4 flex flex-wrap gap-2">
+                  {oid && (
+                    <a
+                      className="px-4 py-2 rounded-xl border border-neutral-300 hover:bg-neutral-50"
+                      href={`/api/orders/receipt.pdf?orderId=${encodeURIComponent(oid)}`}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Download receipt (PDF)
+                    </a>
+                  )}
+                  <button
+                    onClick={() => router.reload()}
+                    className="px-4 py-2 rounded-xl bg-neutral-900 text-white hover:bg-neutral-800"
+                  >
+                    Refresh status
+                  </button>
+                </div>
+              </>
+            )}
           </section>
 
-          {/* Right: QR */}
-          <aside className="rounded-2xl border border-neutral-200 bg-white p-5 shadow-sm">
-            <p className="text-sm font-medium">Scan to view your order</p>
-            <img
-              src={order.qrDataUrl}
-              alt="Order QR"
-              className="mt-4 h-auto w-full max-w-[220px] rounded-xl border"
-            />
-            <p className="mt-3 text-xs text-neutral-500">
+          {/* Aside with QR */}
+          <aside className="rounded-2xl border border-neutral-200 bg-white/70 backdrop-blur p-4 lg:sticky lg:top-8 h-fit">
+            <div className="text-sm font-semibold leading-tight">Scan to view your order</div>
+            <div className="mt-2">
+              {oid && (
+                <div className="p-2 rounded-xl border border-neutral-200 inline-block bg-white">
+                  <div className="w-[168px] h-[168px] flex items-center justify-center">
+                    {/* Fallback text if QR lib not yet loaded */}
+                    {typeof window === "undefined" ? (
+                      <div className="text-xs text-neutral-500">Loading QR…</div>
+                    ) : (
+                      <QRCodeCanvas
+                        id="order-qr"
+                        value={trackUrl}
+                        size={160}
+                        includeMargin={false}
+                        level="M"
+                      />
+                    )}
+                  </div>
+                </div>
+              )}
+            </div>
+            <p className="text-[12px] text-neutral-500 mt-3">
               Open this page later to check updated status. You can also hit “Refresh status”.
             </p>
           </aside>
         </div>
-      </div>
-    </div>
+      </main>
+    </>
   );
 }

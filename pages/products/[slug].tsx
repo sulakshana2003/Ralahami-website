@@ -1,5 +1,5 @@
 // pages/products/[slug].tsx
-/* eslint-disable react/no-unescaped-entities, no-underscore-dangle */
+/* eslint-disable react/no-unescaped-entities */
 import Head from "next/head";
 import Link from "next/link";
 import Image from "next/image";
@@ -43,7 +43,10 @@ const currencyLKR = (amount: number) =>
     maximumFractionDigits: 2,
   }).format(amount);
 
-/** Robust price logic */
+/** Robust price logic:
+ * Prefers ABS LKR off, but if percent/fraction was saved by mistake,
+ * we compute all interpretations and pick the biggest valid discount.
+ */
 function computePrices(price: number, promotion?: number) {
   const base = Number(price) || 0;
   const promo = Math.max(0, Number(promotion) || 0);
@@ -51,7 +54,7 @@ function computePrices(price: number, promotion?: number) {
   // 1) absolute off
   let display = Math.max(0, base - promo);
 
-  // 2) fallback encodings (fraction/percent)
+  // 2) other encodings if abs didn't change anything
   if (promo > 0 && display === base) {
     const asFraction = Math.max(0, base - base * promo); // e.g. 0.15
     const asPercent = Math.max(0, base - (base * promo) / 100); // e.g. 15
@@ -192,7 +195,8 @@ export default function ProductSlugPage({
 
     const payload = {
       slug: product.slug,
-      id: product._id,              // keep an id for downstream use
+      id: product._id,
+      _id: product._id,
       name: product.name,
       image,
       imageUrl: image,
@@ -277,8 +281,10 @@ export default function ProductSlugPage({
         <meta name="twitter:image" content={imgs[0]} />
       </Head>
 
+      {/* Your site header */}
       <Navbar />
 
+      {/* Hero-ish container matching your main theme */}
       <div className="bg-[radial-gradient(ellipse_at_top_left,_var(--tw-gradient-stops))] from-amber-50 via-white to-emerald-50">
         {/* room for fixed navbar */}
         <div className="h-24 md:h-28" />
