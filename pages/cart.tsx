@@ -2,6 +2,9 @@ import Image from "next/image";
 import Link from "next/link";
 import { useMemo, useState } from "react";
 import { useCart } from "@/hooks/useCart";
+import Navbar from "./components/Navbar";
+
+
 
 const FREE_DELIVERY_THRESHOLD = 5000; // LKR
 
@@ -26,6 +29,8 @@ export default function CartPage() {
 
   if (!items || items.length === 0) {
     return (
+      <>
+      <Navbar/>
       <div className="pt-28 pb-16">
         <div className="mx-auto max-w-3xl rounded-2xl border border-neutral-200 bg-white p-10 text-center shadow-sm">
           <div className="mx-auto mb-6 h-20 w-20 rounded-full bg-neutral-100 p-4">
@@ -41,10 +46,13 @@ export default function CartPage() {
           </Link>
         </div>
       </div>
+      </>
     );
   }
 
   return (
+    <>
+    <Navbar/>
     <div className="pt-28 pb-20">
       <div className="mx-auto grid max-w-6xl gap-8 lg:grid-cols-[1.8fr_1fr]">
         <section className="space-y-4">
@@ -219,5 +227,6 @@ export default function CartPage() {
         </aside>
       </div>
     </div>
+    </>
   );
 }

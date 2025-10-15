@@ -64,19 +64,20 @@ const Hero = () => {
         </p>
 
         <div className="mt-6 flex justify-center gap-4">
-          <Link
-            href="/reservation"
-            className="px-6 py-3 rounded-full bg-amber-600 hover:bg-amber-700 text-sm font-medium transition"
-          >
-            Reserve a Table
-          </Link>
-          <Link
-            href="/products"
-            className="px-6 py-3 rounded-full border border-gray-900 text-sm font-medium hover:bg-gray-900 hover:text-white transition"
-          >
-            Order Takeaway
-          </Link>
-        </div>
+  <Link
+    href="/reservation"
+    className="px-6 py-3 rounded-full bg-black text-white text-sm font-medium hover:bg-gray-800 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/40"
+  >
+    Reserve a Table
+  </Link>
+  <Link
+    href="/products"
+    className="px-6 py-3 rounded-full border border-black text-sm font-medium text-black hover:bg-black hover:text-white transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black/40"
+  >
+    Order Takeaway
+  </Link>
+</div>
+
       </div>
     </section>
   );
