@@ -17,7 +17,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const toStr = end.toISOString().slice(0,10);
 
   await dbConnect();
-  const orders = await OnlineOrder.find({ date: { $gte: fromStr, $lte: toStr } })
+  const orders = await (OnlineOrder as any).find({ date: { $gte: fromStr, $lte: toStr } })
     .sort({ createdAt: -1 })
     .lean();
 

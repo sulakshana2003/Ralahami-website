@@ -25,8 +25,8 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
       line_items,
       client_reference_id: draftId,            // <-- attaches the draft
       metadata: { draftId, totalLKR: String(charges?.total ?? 0) },
-      success_url: `${base}/checkout/success?sid={CHECKOUT_SESSION_ID}`,
-      cancel_url: `${base}/checkout/cancel`,
+      success_url: `${process.env.HOST_URL}/order/confirmation?session_id={CHECKOUT_SESSION_ID}`,
+      cancel_url: `${process.env.HOST_URL}/checkout?canceled=1`,
     });
 
     res.status(200).json({ url: session.url });

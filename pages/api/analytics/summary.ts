@@ -38,7 +38,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const toStr = end.toISOString().slice(0,10);
 
   // Pull all orders in date range (inclusive)
-  const dbOrders = await OnlineOrder.find({
+  const dbOrders = await (OnlineOrder as any).find({
     date: { $gte: fromStr, $lte: toStr },
   }).lean();
 
