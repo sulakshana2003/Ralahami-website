@@ -1,104 +1,88 @@
-/* import type { NextApiRequest, NextApiResponse } from 'next'
-import bcrypt from 'bcryptjs'
-import { dbConnect } from '@/lib/db'
-import User from '@/models/User'
-
-export default async function handler(req: NextApiRequest, res: NextApiResponse) {
-  if (req.method !== 'POST') return res.status(405).end('Method Not Allowed')
-
-  const { name, email, password } = req.body || {}
-  if (!name || !email || !password) return res.status(400).json({ message: 'Missing fields' })
-
-  await dbConnect()
-
-  const exists = await User.findOne({ email })
-  if (exists) return res.status(409).json({ message: 'Email already registered' })
-
-  const passwordHash = await bcrypt.hash(password, 10)
-  const user = await User.create({ name, email, passwordHash })
-
-  return res.status(201).json({ id: user._id, email: user.email, name: user.name })
-}
- */
-
-
 import type { NextApiRequest, NextApiResponse } from 'next'
 import bcrypt from 'bcryptjs'
 import { dbConnect } from '@/lib/db'
 import User from '@/models/User'
 
-// 🔽 NEW: mailer import
+// 🔽 NEW: mailer import (unchanged)
 import nodemailer from 'nodemailer'
+
+// ================== PERF: module-scoped singletons & constants ==================
+const phoneRegex = /^\+94\s7\d{8}$/; // compile once
+
+const BRAND = 'Ralahami';
+const BASE_URL = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000';
+
+// Create transporter once (reuse TCP/TLS session & auth)
+const SMTP_HOST = process.env.SMTP_HOST || 'smtp.gmail.com';
+const SMTP_PORT = Number(process.env.SMTP_PORT || 465);
+const SMTP_SECURE = SMTP_PORT === 465;
+
+const transporter = nodemailer.createTransport({
+  host: SMTP_HOST,
+  port: SMTP_PORT,
+  secure: SMTP_SECURE,
+  auth: {
+    user: process.env.EMAIL_USERNAME!,
+    pass: process.env.EMAIL_PASSWORD!,
+  },
+});
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   if (req.method !== 'POST') return res.status(405).end('Method Not Allowed')
 
   const { name, email, password, confirmPassword, phone, address } = req.body || {}
 
-  // Validation
+  // Validation (unchanged logic)
   if (!name || !email || !password || !confirmPassword || !phone || !address) {
     return res.status(400).json({ message: 'All fields are required' })
   }
-
   if (password !== confirmPassword) {
     return res.status(400).json({ message: 'Passwords do not match' })
   }
-
-  const phoneRegex = /^\+94\s7\d{8}$/
   if (!phoneRegex.test(phone)) {
     return res.status(400).json({ message: 'Invalid phone format. Use +94 7XXXXXXXX' })
   }
 
   await dbConnect()
 
-  const exists = await User.findOne({ email })
+  // ================== PERF: overlap IO (exists) with CPU (hash) ==================
+  const existsPromise = User.exists({ email }); // cheaper than findOne for existence
+  const hashPromise = bcrypt.hash(password, 10);
+
+  const exists = await existsPromise;
   if (exists) return res.status(409).json({ message: 'Email already registered' })
 
-  const passwordHash = await bcrypt.hash(password, 10)
+  const passwordHash = await hashPromise;
   const user = await User.create({ name, email, passwordHash, phone, address })
 
-  // 🔽 NEW: send welcome email (non-blocking; failures won't break signup)
-  try {
-    const host = process.env.SMTP_HOST || 'smtp.gmail.com'
-    const port = Number(process.env.SMTP_PORT || 465)
-    const secure = port === 465
+  // ================== PERF: respond first, email later ==================
+  // Send HTTP response immediately (don’t block on email)
+  res.status(201).json({ id: user._id, email: user.email, name: user.name })
 
-    const transporter = nodemailer.createTransport({
-      host,
-      port,
-      secure,
-      auth: {
-        user: process.env.EMAIL_USERNAME!,
-        pass: process.env.EMAIL_PASSWORD!,
-      },
-    })
-
-    const brand = 'Ralahami'
-    const baseUrl = process.env.NEXT_PUBLIC_BASE_URL || 'http://localhost:3000'
-
-    // Inline logo via CID — ensure the file exists at /public/images/restaurant-logo.png 
-    await transporter.sendMail({
-      from: process.env.EMAIL_USERNAME,
-      to: user.email,
-      subject: `Welcome to ${brand}!`,
-      html: getWelcomeHtml({ name: user.name, brand, baseUrl }),
-      attachments: [
-        {
-          filename: 'logo.png',
-          path: `${process.cwd()}/public/images/RalahamiLogo.png`,
-          cid: 'restaurantlogo@inline', // must match the cid in HTML
-        },
-      ],
-    })
-  } catch (e) {
-    // Don’t fail registration if email sending fails
-    console.error('Welcome email failed:', e)
-  }
-
-  return res.status(201).json({ id: user._id, email: user.email, name: user.name })
+  // Fire-and-forget welcome email AFTER response has been sent
+  // Keep the same content & attachment behavior
+  setImmediate(async () => {
+    try {
+      await transporter.sendMail({
+        from: process.env.EMAIL_USERNAME,
+        to: user.email,
+        subject: `Welcome to ${BRAND}!`,
+        html: getWelcomeHtml({ name: user.name, brand: BRAND, baseUrl: BASE_URL }),
+        attachments: [
+          {
+            filename: 'logo.png',
+            path: `${process.cwd()}/public/images/RalahamiLogo.png`,
+            cid: 'restaurantlogo@inline',
+          },
+        ],
+      })
+    } catch (e) {
+      console.error('Welcome email failed:', e)
+    }
+  })
 }
 
-// 🔽 NEW: small helper to render the welcome email HTML
+// 🔽 unchanged
 function getWelcomeHtml({
   name,
   brand,
@@ -138,7 +122,7 @@ function getWelcomeHtml({
   `
 }
 
-// 🔽 NEW: tiny HTML escaper to avoid odd chars breaking the markup
+// 🔽 unchanged
 function escapeHtml(s: string) {
   return String(s).replace(/[&<>"']/g, (m) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[m]!))
 }
