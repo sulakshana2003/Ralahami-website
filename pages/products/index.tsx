@@ -2,10 +2,11 @@
 import Head from "next/head";
 import React from "react";
 import type { GetServerSideProps } from "next";
-import Navbar from "../components/Navbar";
-import Footer from "../components/Footer";
+import Navbar from "../../src/components/Navbar";
+import Footer from "../../src/components/Footer";
 import ProductCard from "../../src/components/ProductCard";
 import { motion } from "framer-motion";
+import type { Model } from "mongoose"; // ✅ type-only import (removed at compile time)
 
 type ProductItem = {
   id: string;
@@ -110,8 +111,11 @@ export const getServerSideProps: GetServerSideProps<{ products: ProductItem[] }>
 
   await dbConnect();
 
+  // ✅ minimal TS fix: cast to Mongoose Model for proper typing of .find/.select/.lean
+  const ProductModel = Product as unknown as Model<any>;
+
   // ✅ Only fetch items that are available
-  const docs: any[] = await Product.find({ isAvailable: true }).select("-__v").lean();
+  const docs: any[] = await ProductModel.find({ isAvailable: true }).select("-__v").lean();
 
   const products: ProductItem[] = docs.map((d: any) => ({
     id: String(d._id),

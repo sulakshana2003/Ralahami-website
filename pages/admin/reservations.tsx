@@ -3,12 +3,9 @@ import useSWR from "swr";
 import { useMemo, useState } from "react";
 import DashboardLayout from "../components/DashboardLayout";
 import AdminGuard from "../components/AdminGuard";
-import { generateReservationReport } from "../components/reservations/_generateReservationReport";
-import {
-  ReservationsByDateBar,
-  PaymentStatusPie,
-  PaymentMethodDoughnut,
-} from "../components/reservations/ReservationCharts";
+import { generateReservationReport } from "../components/reservations/generateReservationReport";
+
+
 // ---------- utils ----------
 const fetcher = async (url: string) => {
   const r = await fetch(url, { credentials: "same-origin" });

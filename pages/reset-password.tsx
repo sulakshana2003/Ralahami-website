@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
-import Navbar from './components/Navbar'
-import Footer from "./components/Footer";
+import Navbar from '../src/components/Navbar'
+import Footer from "../src/components/Footer";
 
 export default function ResetPasswordPage() {
   const [email, setEmail] = useState("");

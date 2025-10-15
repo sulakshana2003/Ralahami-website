@@ -1,6 +1,6 @@
 "use client";
 import React from "react";
-import { Item } from "../../types/inventory";
+import { Item } from "../../../pages/types/inventory";
 
 export default function LowStock({
   items,

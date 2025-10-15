@@ -2,12 +2,16 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 import { dbConnect } from "@/lib/db"; // your MongoDB connect util
 import Product from "@/models/Product";
+import type { Model } from "mongoose"; // ✅ minimal addition
+
+// ✅ Cast to a typed Mongoose Model so .find/.select/.lean are recognized by TS
+const ProductModel = Product as unknown as Model<any>;
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   await dbConnect();
 
   try {
-    const products = await Product.find({ isSignatureToday: true, isAvailable: true })
+    const products = await ProductModel.find({ isSignatureToday: true, isAvailable: true })
       .select("name slug images price promotion")
       .lean();
 

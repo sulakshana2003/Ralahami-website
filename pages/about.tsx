@@ -4,8 +4,8 @@ import Image from 'next/image'
 import type { GetServerSideProps } from 'next'
 import { dbConnect } from '@/lib/db'
 import About from '@/models/About'
-import Navbar from '../pages/components/Navbar'
-import Footer from '../pages/components/Footer'
+import Navbar from '../src/components/Navbar'
+import Footer from '../src/components/Footer'
 
 type AboutVM = {
   title: string

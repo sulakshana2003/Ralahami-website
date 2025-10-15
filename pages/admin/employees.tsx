@@ -3,8 +3,8 @@
 
 import React, { useMemo, useState, useEffect, useRef, forwardRef, useImperativeHandle } from "react";
 import useSWR from "swr";
-import DashboardLayout from "../components/DashboardLayout";
-import AdminGuard from "../components/AdminGuard";
+import DashboardLayout from "../../src/components/DashboardLayout";
+import AdminGuard from "../../src/components/AdminGuard";
 import jsPDF from "jspdf";
 import { Bar } from "react-chartjs-2";
 import {

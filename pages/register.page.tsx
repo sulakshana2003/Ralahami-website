@@ -79,6 +79,7 @@ export default function Register() {
                   </h1>
                   <p className="mt-1 text-xs text-stone-600">
                     Already have an account?{' '}
+                    // eslint-disable-next-line @next/next/no-html-link-for-pages
                     <a
                       href="/login"
                       className="font-medium text-amber-700 underline decoration-amber-400/70 underline-offset-2 hover:text-amber-800"

@@ -4,8 +4,8 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import useSWR from "swr";
-import DashboardLayout from "../components/DashboardLayout";
-import AdminGuard from "../components/AdminGuard";
+import DashboardLayout from "../../src/components/DashboardLayout";
+import AdminGuard from "../../src/components/AdminGuard";
 
 /* ---------- Recharts ---------- */
 import {
