@@ -5,7 +5,11 @@ import Image from "next/image";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/router";
 import { useEffect, useMemo, useRef, useState } from "react";
-
+import Navbar from "../components/Navbar";
+import Footer from "../components/Footer";
+<>
+<Navbar/>
+</>
 // Lazy-load QR renderer only in the browser
 const QRCodeCanvas = dynamic(async () => (await import("qrcode.react")).QRCodeCanvas, {
   ssr: false,
@@ -23,7 +27,6 @@ type NormalizedOrder = {
   items: Line[];
   customer?: { name?: string; email?: string; phone?: string };
   note?: string;
-  // trackUrl may not always be returned, so we compute a fallback
   trackUrl?: string;
 };
 
@@ -60,7 +63,12 @@ export default function OrderConfirmPage() {
   const [polling, setPolling] = useState(false);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
 
-  // First load: hit /api/orders/confirm (this also emails & stores DB if session_id present)
+  // email capture state
+  const [email, setEmail] = useState("");
+  const [savingEmail, setSavingEmail] = useState<"idle" | "saving" | "saved" | "error">("idle");
+  const savedOnceRef = useRef(false);
+
+  // First load: /api/orders/confirm
   useEffect(() => {
     if (!router.isReady) return;
     const controller = new AbortController();
@@ -82,6 +90,7 @@ export default function OrderConfirmPage() {
 
         const o: NormalizedOrder = data.order;
         setOrder(o);
+        if (o?.customer?.email) setEmail(o.customer.email);
       } catch (err) {
         console.error(err);
       } finally {
@@ -120,8 +129,8 @@ export default function OrderConfirmPage() {
                 }
           );
         }
-      } catch (e) {
-        // ignore transient errors; next tick will retry
+      } catch {
+        // ignore transient errors
       }
     };
 
@@ -133,8 +142,50 @@ export default function OrderConfirmPage() {
     };
   }, [oid]);
 
+  // Auto-save email once when we have both oid & a non-empty email (avoid duplicates)
+  useEffect(() => {
+    const shouldAutoSave = !!oid && !!email && !savedOnceRef.current;
+    if (!shouldAutoSave) return;
+
+    (async () => {
+      try {
+        setSavingEmail("saving");
+        const res = await fetch("/api/orders/save-contact", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ orderId: oid, email }),
+        });
+        if (!res.ok) throw new Error((await res.json()).error || "Failed to save email");
+        savedOnceRef.current = true;
+        setSavingEmail("saved");
+      } catch (e) {
+        console.error(e);
+        setSavingEmail("error");
+      } finally {
+        setTimeout(() => setSavingEmail("idle"), 1500);
+      }
+    })();
+  }, [oid, email]);
+
   const items = order?.items ?? [];
   const totalQty = useMemo(() => items.reduce((s, i) => s + (Number(i.qty) || 0), 0), [items]);
+
+  if (loading) {
+    return (
+      <main className="mx-auto max-w-3xl p-6">
+        <h1 className="text-xl font-semibold">Confirming your order…</h1>
+      </main>
+    );
+  }
+
+  if (!oid) {
+    return (
+      <main className="mx-auto max-w-3xl p-6">
+        <h1 className="text-xl font-semibold">Order not found</h1>
+        <p className="text-slate-600 mt-2">No orderId or session was provided.</p>
+      </main>
+    );
+  }
 
   return (
     <>
@@ -266,7 +317,7 @@ export default function OrderConfirmPage() {
                   {oid && (
                     <a
                       className="px-4 py-2 rounded-xl border border-neutral-300 hover:bg-neutral-50"
-                      href={`/api/orders/receipt.pdf?orderId=${encodeURIComponent(oid)}`}
+                      href={`/api/orders/receipt.pdt?orderId=${encodeURIComponent(oid)}`}
                       target="_blank"
                       rel="noreferrer"
                     >

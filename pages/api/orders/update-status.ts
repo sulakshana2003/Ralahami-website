@@ -1,145 +1,110 @@
 // pages/api/orders/update-status.ts
 import type { NextApiRequest, NextApiResponse } from "next";
-import { dbConnect } from "@/lib/db";
-import OnlineOrder from "@/models/OnlineOrder";
-import type { IOnlineOrder } from "@/models/OnlineOrder";
-import type { Model, FilterQuery, HydratedDocument } from "mongoose";
+import mongoose from "mongoose";
 import nodemailer from "nodemailer";
-import QRCode from "qrcode";
+import OnlineOrder from "@/models/OnlineOrder";
 
-const Orders = OnlineOrder as unknown as Model<IOnlineOrder>;
-const HOST = process.env.HOST_URL || "";
-const ALLOWED = new Set(["confirmed", "preparing", "ready", "completed", "cancelled"]);
+type StatusType = "pending" | "preparing" | "ready" | "completed" | "cancelled" | "confirmed";
 
-type Resp = { ok: true; orderId: string; status: string } | { ok: false; error: string };
+async function dbConnect() {
+  if (mongoose.connection.readyState === 1) return;
+  if (!process.env.MONGODB_URI) throw new Error("MONGODB_URI is not set");
+  await mongoose.connect(process.env.MONGODB_URI);
+}
 
-export default async function handler(req: NextApiRequest, res: NextApiResponse<Resp>) {
-  if (req.method !== "POST") {
-    res.setHeader("Allow", "POST");
-    return res.status(405).json({ ok: false, error: "Method not allowed" });
+function getCustomerEmailFromDoc(doc: any): string | undefined {
+  // flat field first
+  const flat = (doc as any).customerEmail as string | undefined;
+  if (flat) return flat;
+
+  // then note JSON
+  try {
+    const j = doc.note ? JSON.parse(doc.note) : {};
+    return j?.customer?.email || j?.order?.customer?.email || undefined;
+  } catch {
+    return undefined;
   }
+}
 
-  // allow admin to pass an email override (optional)
-  const { orderId, status, email: overrideEmail } = (req.body || {}) as {
-    orderId?: string;
-    status?: string;
-    email?: string;
-  };
+async function sendReadyEmail(to: string, orderId: string) {
+  // You can keep this as SMTP_URL env, or hardcode Gmail below (app password recommended).
+  // Example SMTP_URL:  smtp://USER:APP_PASSWORD@smtp.gmail.com:587
+  const smtpUrl = process.env.SMTP_URL;
+  const from = process.env.EMAIL_FROM || "ralahamihotel@gmail.com";
 
-  if (!orderId || typeof orderId !== "string") {
-    return res.status(400).json({ ok: false, error: "Missing orderId" });
-  }
-  if (!status || typeof status !== "string") {
-    return res.status(400).json({ ok: false, error: "Missing status" });
-  }
+  const transporter = nodemailer.createTransport(
+    smtpUrl || {
+      host: "smtp.gmail.com",
+      port: 587,
+      secure: false,
+      auth: {
+        user: "ralahamihotel@gmail.com",
+        pass: process.env.GMAIL_APP_PASSWORD!, // create an App Password in Google Account
+      },
+    }
+  );
 
-  // normalize case
-  const newStatus = status.toLowerCase();
-  if (!ALLOWED.has(newStatus)) {
-    return res.status(400).json({ ok: false, error: `Invalid status: ${status}` });
-  }
+  const subject = `Your order ${orderId} is ready for pickup`;
+  const html = `
+    <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:640px;margin:0 auto">
+      <h2 style="margin:0 0 8px">✅ Your order is ready!</h2>
+      <p style="margin:0 0 12px">Order <b>${orderId}</b> is now ready. Please come by to pick it up.</p>
+      <p style="margin:0 0 6px">If you have any questions, reply to this email.</p>
+      <p style="margin:12px 0 0;color:#6b7280">— Ralahami Hotel</p>
+    </div>
+  `;
+
+  await transporter.sendMail({
+    from,
+    to,
+    subject,
+    html,
+  });
+}
+
+export default async function handler(req: NextApiRequest, res: NextApiResponse) {
+  if (req.method !== "POST") return res.status(405).json({ error: "Method not allowed" });
+
+  const { orderId, status } = (req.body ?? {}) as { orderId?: string; status?: StatusType };
+  const allowed: StatusType[] = ["confirmed", "pending", "preparing", "ready", "completed", "cancelled"];
+
+  if (!orderId) return res.status(400).json({ error: "orderId is required" });
+  if (!status || !allowed.includes(status)) return res.status(400).json({ error: "Invalid status" });
 
   try {
     await dbConnect();
 
-    let order: HydratedDocument<IOnlineOrder> | null = await Orders.findOne(
-      { orderId } as FilterQuery<IOnlineOrder>
-    );
-    if (!order) order = await Orders.findById(orderId);
-    if (!order) return res.status(404).json({ ok: false, error: "Order not found" });
-
-    // parse existing note JSON (holds status & flags)
-    let noteJson: any = {};
-    if (order.note) {
-      try {
-        noteJson = JSON.parse(order.note);
-      } catch {
-        noteJson = { message: order.note };
-      }
+    const or: any[] = [{ orderId }];
+    if (mongoose.Types.ObjectId.isValid(orderId)) {
+      or.push({ _id: new mongoose.Types.ObjectId(orderId) }, { _id: orderId });
     }
 
-    // write new status + timestamp
-    noteJson.status = newStatus;
-    noteJson.statusUpdatedAt = new Date().toISOString();
+    const doc = await OnlineOrder.findOne({ $or: or });
+    if (!doc) return res.status(404).json({ error: "Order not found" });
 
-    // persist the status change first
-    const updated = await Orders.findByIdAndUpdate(
-      order._id,
-      { note: JSON.stringify(noteJson) },
-      { new: true }
-    );
-    if (!updated) return res.status(500).json({ ok: false, error: "Failed to update order" });
+    // update status in note
+    let note: any = {};
+    try { note = doc.note ? JSON.parse(doc.note) : {}; } catch {}
+    note.status = status;
 
-    // decide whether to notify
-    const isReadyNow = newStatus === "ready";
-    const wasNotified = Boolean(noteJson.notifiedReady);
-    const shouldNotify = isReadyNow && !wasNotified;
+    await OnlineOrder.updateOne({ _id: doc._id }, { $set: { note: JSON.stringify(note) } });
 
-    // find best-guess customer email
-    const customerEmail =
-      overrideEmail ||
-      noteJson?.customer?.email ||
-      noteJson?.order?.customer?.email ||
-      undefined;
-
-    // try to email; log why if not
-    if (shouldNotify) {
-      if (!process.env.SMTP_URL || !process.env.EMAIL_FROM) {
-        console.warn("[ready-email] Missing SMTP_URL or EMAIL_FROM");
-      } else if (!customerEmail) {
-        console.warn("[ready-email] No customer email found in note or override");
-      } else {
+    // If status becomes "ready" -> email the customer (if we have an email)
+    if (status === "ready") {
+      const email = getCustomerEmailFromDoc(doc) || undefined;
+      if (email) {
         try {
-          const trackUrl = `${HOST}/order/track?orderId=${encodeURIComponent(
-            updated.orderId || String(updated._id)
-          )}`;
-          const qrPng = await QRCode.toBuffer(trackUrl, { margin: 1, width: 320 });
-
-          const transporter = nodemailer.createTransport(process.env.SMTP_URL);
-          await transporter.sendMail({
-            from: process.env.EMAIL_FROM,
-            to: customerEmail,
-            subject: `Your order is ready 🎉 (${updated.orderId || String(updated._id)})`,
-            html: buildReadyHtml({
-              orderId: updated.orderId || String(updated._id),
-              customerName:
-                noteJson?.customer?.name || noteJson?.order?.customer?.name || "there",
-              trackUrl,
-            }),
-            attachments: [{ filename: "order-qr.png", content: qrPng, cid: "qr", contentType: "image/png" }],
-          });
-
-          // mark as notified to prevent duplicates
-          noteJson.notifiedReady = true;
-          await Orders.findByIdAndUpdate(updated._id, { note: JSON.stringify(noteJson) });
-        } catch (err) {
-          console.error("[ready-email] sendMail error:", err);
+          await sendReadyEmail(email, doc.orderId || String(doc._id));
+        } catch (e) {
+          console.error("[update-status] ready email failed:", e);
+          // Don't fail the request because of email; just log it.
         }
       }
     }
 
-    return res
-      .status(200)
-      .json({ ok: true, orderId: updated.orderId || String(updated._id), status: newStatus });
+    return res.status(200).json({ ok: true });
   } catch (e: any) {
-    console.error("update-status error:", e);
-    return res.status(500).json({ ok: false, error: e?.message || "Server error" });
+    console.error("[update-status] error:", e);
+    return res.status(500).json({ error: e?.message || "Internal error" });
   }
-}
-
-/* ------------------------- email template ------------------------- */
-function buildReadyHtml(p: { orderId: string; customerName: string; trackUrl: string }) {
-  return `
-  <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,Arial,sans-serif;max-width:560px;margin:0 auto">
-    <h2 style="margin:0 0 8px">Your order is ready 🎉</h2>
-    <p style="margin:0 0 12px">Hi ${escapeHtml(p.customerName)}, your order <b>${p.orderId}</b> is ready for pickup/delivery.</p>
-    <p style="margin:0 0 8px">Show this QR at the counter or to the courier:</p>
-    <p style="margin:0 0 16px"><img src="cid:qr" alt="Order QR" width="160" height="160" style="border:1px solid #eee;border-radius:8px"/></p>
-    <p style="margin:0 0 4px">You can also <a href="${p.trackUrl}">click here</a> to view live status.</p>
-    <p style="margin:16px 0 0;color:#6b7280">Thanks for choosing us!</p>
-  </div>`;
-}
-
-function escapeHtml(s: string) {
-  return s.replace(/[&<>"']/g, (m) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" }[m]!));
 }
