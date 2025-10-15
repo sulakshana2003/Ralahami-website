@@ -1,6 +1,6 @@
 /* eslint-disable @typescript-eslint/no-explicit-any */
-// pages/checkout.tsx
-import { useEffect, useMemo, useState } from "react";
+import Head from "next/head";
+import React, { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/router";
 import Image from "next/image";
 import Link from "next/link";
@@ -8,6 +8,10 @@ import toast from "react-hot-toast";
 import { useCart } from "@/hooks/useCart";
 import { Elements } from "@stripe/react-stripe-js";
 import { loadStripe } from "@stripe/stripe-js";
+
+/* === Your site chrome === */
+import Navbar from "./components/Navbar";
+import Footer from "./components/Footer";
 
 const stripePromise = loadStripe(
   "pk_test_51RwhjCE4mghBcU8D97gjwODEwddai88lzSnTOo1E9mvIn9wDRbtDv4nPS9rF2nhAJK0ZZ5pZcHmokKr1dtiBjZXO00huVbMGyD"
@@ -48,7 +52,7 @@ const CheckoutPageContent = () => {
   const hydrated = useHasHydrated();
 
   // cart
-  const items    = useCart((s) => s.items);
+  const items = useCart((s) => s.items);
   const subtotal = useCart((s) => s.subtotal());
   const clearCart = useCart((s) => s.clear);
 
@@ -165,7 +169,7 @@ const CheckoutPageContent = () => {
       setSubmitting(true);
 
       if (form.paymentMethod === "online") {
-        // 1) Create draft in DB for the webhook to update after Stripe payment success
+        // 1) Create draft in DB
         const draftRes = await fetch("/api/orders/draft", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -181,7 +185,7 @@ const CheckoutPageContent = () => {
 
         const { draftId } = await draftRes.json();
 
-        // 2) Create Stripe Checkout Session, passing draftId
+        // 2) Create Stripe Checkout Session
         const res = await fetch("/api/checkout/create-session", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
@@ -198,7 +202,7 @@ const CheckoutPageContent = () => {
         const data = await res.json();
         if (data?.url) {
           toast.success("Redirecting to secure payment…");
-          window.location.href = data.url; // browser navigates to Stripe
+          window.location.href = data.url;
           return;
         }
 
@@ -207,7 +211,7 @@ const CheckoutPageContent = () => {
         return;
       }
 
-      // === Offline payments (COD / Card-on-Delivery): persist immediately ===
+      // === Offline payments (COD / Card-on-Delivery) ===
       const localOrderId = `${form.paymentMethod.toUpperCase()}-${Date.now()}`;
 
       await fetch("/api/orders/create", {
@@ -216,7 +220,7 @@ const CheckoutPageContent = () => {
         body: JSON.stringify({
           orderId: localOrderId,
           revenue: total,
-          cost: Math.round(total * 0.6), // adjust if you track real COGS
+          cost: Math.round(total * 0.6),
           note: JSON.stringify({
             status: "pending",
             method: form.paymentMethod,
@@ -406,8 +410,8 @@ const CheckoutPageContent = () => {
               <div className="mt-4 grid gap-3 sm:grid-cols-3">
                 {([
                   { key: "online",            title: "Online (Card)",      note: "Secure payment" },
-                  { key: "cod",               title: "Cash on Delivery",    note: "Pay with cash" },
-                  { key: "card_on_delivery",  title: "Card on Delivery",    note: "POS terminal" },
+                  { key: "cod",               title: "Cash on Delivery",   note: "Pay with cash" },
+                  { key: "card_on_delivery",  title: "Card on Delivery",   note: "POS terminal" },
                 ] as const).map((p) => (
                   <label
                     key={p.key}
@@ -533,7 +537,7 @@ const CheckoutPageContent = () => {
               <li className="rounded-xl border border-neutral-200 bg-white p-3">🔒 Encrypted payments</li>
               <li className="rounded-xl border border-neutral-200 bg-white p-3">🚚 Same-day (Colombo)</li>
               <li className="rounded-xl border border-neutral-200 bg-white p-3">💳 Cash / Card on delivery</li>
-              <li className="rounded- xl border border-neutral-200 bg-white p-3">📞 Support: +94 11 234 5678</li>
+              <li className="rounded-xl border border-neutral-200 bg-white p-3">📞 Support: +94 11 234 5678</li>
             </ul>
           </aside>
         </div>
@@ -544,8 +548,22 @@ const CheckoutPageContent = () => {
 
 export default function CheckoutPage() {
   return (
-    <Elements stripe={stripePromise}>
-      <CheckoutPageContent />
-    </Elements>
+    <>
+      <Head>
+        <title>Checkout — Ralahami</title>
+        <meta name="description" content="Complete your order securely on Ralahami." />
+      </Head>
+
+      {/* Your Navbar on this page */}
+      <Navbar />
+
+      {/* Stripe context + page content */}
+      <Elements stripe={stripePromise}>
+        <CheckoutPageContent />
+      </Elements>
+
+      {/* Your site footer */}
+      <Footer />
+    </>
   );
 }

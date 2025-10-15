@@ -181,7 +181,7 @@ const ProductsPage: React.FC<Props> = ({ products }) => {
               View Menu
             </a>
             <a
-              href="/booking"
+              href="/reservation"
               className="rounded-full border border-white/50 bg-white/10 px-6 py-3 text-white text-sm font-semibold shadow-md backdrop-blur transition hover:bg-white/20 focus:outline-none focus-visible:ring-2 focus-visible:ring-amber-400"
             >
               Book a Table

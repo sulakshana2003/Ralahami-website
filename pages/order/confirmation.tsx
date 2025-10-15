@@ -5,12 +5,11 @@ import Image from "next/image";
 import dynamic from "next/dynamic";
 import { useRouter } from "next/router";
 import { useEffect, useMemo, useRef, useState } from "react";
-import Navbar from "../components/Navbar";
+
+/* Site chrome */
 import Footer from "../components/Footer";
-<>
-<Navbar/>
-</>
-// Lazy-load QR renderer only in the browser
+
+/* Lazy-load QR renderer only in the browser */
 const QRCodeCanvas = dynamic(async () => (await import("qrcode.react")).QRCodeCanvas, {
   ssr: false,
 });
@@ -61,7 +60,7 @@ export default function OrderConfirmPage() {
   const [order, setOrder] = useState<NormalizedOrder | null>(null);
   const [loading, setLoading] = useState(true);
   const [polling, setPolling] = useState(false);
-  const pollRef = useRef<NodeJS.Timeout | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null); // safer type for browser
 
   // email capture state
   const [email, setEmail] = useState("");
@@ -142,7 +141,7 @@ export default function OrderConfirmPage() {
     };
   }, [oid]);
 
-  // Auto-save email once when we have both oid & a non-empty email (avoid duplicates)
+  // Auto-save email once when we have both oid & a non-empty email
   useEffect(() => {
     const shouldAutoSave = !!oid && !!email && !savedOnceRef.current;
     if (!shouldAutoSave) return;
@@ -170,200 +169,185 @@ export default function OrderConfirmPage() {
   const items = order?.items ?? [];
   const totalQty = useMemo(() => items.reduce((s, i) => s + (Number(i.qty) || 0), 0), [items]);
 
-  if (loading) {
-    return (
-      <main className="mx-auto max-w-3xl p-6">
-        <h1 className="text-xl font-semibold">Confirming your order…</h1>
-      </main>
-    );
-  }
-
-  if (!oid) {
-    return (
-      <main className="mx-auto max-w-3xl p-6">
-        <h1 className="text-xl font-semibold">Order not found</h1>
-        <p className="text-slate-600 mt-2">No orderId or session was provided.</p>
-      </main>
-    );
-  }
-
   return (
     <>
       <Head>
-        <title>Order confirmed</title>
+        <title>Order confirmed — Ralahami</title>
       </Head>
 
-      <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
-        <div className="flex items-start justify-between gap-4 mb-4">
-          <div>
-            <h1 className="text-2xl font-semibold tracking-tight">Order confirmed 🎉</h1>
-            <p className="text-sm text-neutral-600">
-              Save this page. It will auto-update as we prepare your order.
-            </p>
+
+      {/* Content */}
+      {loading ? (
+        <main className="mx-auto max-w-3xl p-6">
+          <h1 className="text-xl font-semibold">Confirming your order…</h1>
+        </main>
+      ) : ! (order?.orderId || orderIdQ) ? (
+        <main className="mx-auto max-w-3xl p-6">
+          <h1 className="text-xl font-semibold">Order not found</h1>
+          <p className="text-slate-600 mt-2">No orderId or session was provided.</p>
+        </main>
+      ) : (
+        <main className="max-w-6xl mx-auto px-4 sm:px-6 py-8">
+          <div className="flex items-start justify-between gap-4 mb-4">
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight">Order confirmed 🎉</h1>
+              <p className="text-sm text-neutral-600">Save this page. It will auto-update as we prepare your order.</p>
+            </div>
+
+            <div className="flex gap-2">
+              <button
+                onClick={() => router.reload()}
+                className="px-4 py-2 rounded-xl border border-neutral-300 hover:bg-neutral-50"
+              >
+                Refresh status
+              </button>
+              <Link href="/" className="px-4 py-2 rounded-xl bg-black text-white hover:bg-neutral-800">
+                Continue shopping
+              </Link>
+            </div>
           </div>
 
-          <div className="flex gap-2">
-            <button
-              onClick={() => router.reload()}
-              className="px-4 py-2 rounded-xl border border-neutral-300 hover:bg-neutral-50"
-            >
-              Refresh status
-            </button>
-            <Link
-              href="/"
-              className="px-4 py-2 rounded-xl bg-black text-white hover:bg-neutral-800"
-            >
-              Continue shopping
-            </Link>
-          </div>
-        </div>
+          {/* Card + Aside */}
+          <div className="grid grid-cols-1 lg:grid-cols-[1fr,260px] gap-6">
+            {/* Main Card */}
+            <section className="rounded-2xl border border-neutral-200 bg-white/70 backdrop-blur p-4 sm:p-6">
+              {!loading && order && (
+                <>
+                  {/* Meta */}
+                  <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-2 text-sm">
+                    <div className="col-span-2">
+                      <div className="text-neutral-500">Order ID</div>
+                      <div className="flex items-center gap-2">
+                        <code className="text-[13px] break-all">{order.orderId}</code>
+                        <span
+                          className={`px-2 py-0.5 rounded-full text-xs ring-1 ${
+                            STATUS_COLORS[order.status] || STATUS_COLORS.confirmed
+                          }`}
+                          title={polling ? "Auto-updating…" : "Idle"}
+                        >
+                          {order.status[0]?.toUpperCase()}
+                          {order.status.slice(1)}
+                        </span>
+                      </div>
+                    </div>
 
-        {/* Card + Aside */}
-        <div className="grid grid-cols-1 lg:grid-cols-[1fr,260px] gap-6">
-          {/* Main Card */}
-          <section className="rounded-2xl border border-neutral-200 bg-white/70 backdrop-blur p-4 sm:p-6">
-            {loading && <p className="text-neutral-500">Finalizing your order…</p>}
+                    <div>
+                      <div className="text-neutral-500">Date</div>
+                      <div className="font-medium">{order.date}</div>
+                    </div>
 
-            {!loading && order && (
-              <>
-                {/* Meta */}
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-x-6 gap-y-2 text-sm">
-                  <div className="col-span-2">
-                    <div className="text-neutral-500">Order ID</div>
-                    <div className="flex items-center gap-2">
-                      <code className="text-[13px] break-all">{order.orderId}</code>
-                      <span
-                        className={`px-2 py-0.5 rounded-full text-xs ring-1 ${
-                          STATUS_COLORS[order.status] || STATUS_COLORS.confirmed
-                        }`}
-                        title={polling ? "Auto-updating…" : "Idle"}
-                      >
-                        {order.status[0]?.toUpperCase()}
-                        {order.status.slice(1)}
-                      </span>
+                    <div>
+                      <div className="text-neutral-500">Total paid</div>
+                      <div className="font-semibold">{rs(order.revenue)}</div>
                     </div>
                   </div>
 
-                  <div>
-                    <div className="text-neutral-500">Date</div>
-                    <div className="font-medium">{order.date}</div>
-                  </div>
-
-                  <div>
-                    <div className="text-neutral-500">Total paid</div>
-                    <div className="font-semibold">{rs(order.revenue)}</div>
-                  </div>
-                </div>
-
-                {/* Items Table */}
-                <div className="mt-4">
-                  <div className="overflow-x-auto rounded-2xl border border-neutral-200">
-                    <table className="min-w-full text-sm">
-                      <thead className="bg-neutral-50 text-neutral-700">
-                        <tr>
-                          <th className="text-left px-3 py-2">Item</th>
-                          <th className="text-right px-3 py-2">Qty</th>
-                          <th className="text-right px-3 py-2">Price</th>
-                          <th className="text-right px-3 py-2">Total</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {items.map((it, idx) => (
-                          <tr key={idx} className="border-t border-neutral-200">
-                            <td className="px-3 py-2">{it.name}</td>
-                            <td className="px-3 py-2 text-right">{it.qty}</td>
-                            <td className="px-3 py-2 text-right">{rs(it.unitPrice)}</td>
-                            <td className="px-3 py-2 text-right font-medium">{rs(it.lineTotal)}</td>
+                  {/* Items Table */}
+                  <div className="mt-4">
+                    <div className="overflow-x-auto rounded-2xl border border-neutral-200">
+                      <table className="min-w-full text-sm">
+                        <thead className="bg-neutral-50 text-neutral-700">
+                          <tr>
+                            <th className="text-left px-3 py-2">Item</th>
+                            <th className="text-right px-3 py-2">Qty</th>
+                            <th className="text-right px-3 py-2">Price</th>
+                            <th className="text-right px-3 py-2">Total</th>
                           </tr>
-                        ))}
-                        <tr className="border-t border-neutral-200 bg-neutral-50">
-                          <td className="px-3 py-2 font-medium">Total</td>
-                          <td className="px-3 py-2 text-right font-medium">{totalQty}</td>
-                          <td></td>
-                          <td className="px-3 py-2 text-right font-semibold">{rs(order.revenue)}</td>
-                        </tr>
-                      </tbody>
-                    </table>
+                        </thead>
+                        <tbody>
+                          {items.map((it, idx) => (
+                            <tr key={idx} className="border-t border-neutral-200">
+                              <td className="px-3 py-2">{it.name}</td>
+                              <td className="px-3 py-2 text-right">{it.qty}</td>
+                              <td className="px-3 py-2 text-right">{rs(it.unitPrice)}</td>
+                              <td className="px-3 py-2 text-right font-medium">{rs(it.lineTotal)}</td>
+                            </tr>
+                          ))}
+                          <tr className="border-t border-neutral-200 bg-neutral-50">
+                            <td className="px-3 py-2 font-medium">Total</td>
+                            <td className="px-3 py-2 text-right font-medium">{totalQty}</td>
+                            <td />
+                            <td className="px-3 py-2 text-right font-semibold">{rs(order.revenue)}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+                    </div>
                   </div>
-                </div>
 
-                {/* Customer */}
-                {(order.customer?.name || order.customer?.email || order.customer?.phone) && (
-                  <div className="mt-4 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
-                    <div className="text-sm font-medium mb-2">Customer</div>
-                    {order.customer?.name && (
-                      <div className="text-sm">
-                        <span className="text-neutral-500">Name: </span>
-                        {order.customer.name}
-                      </div>
+                  {/* Customer */}
+                  {(order.customer?.name || order.customer?.email || order.customer?.phone) && (
+                    <div className="mt-4 rounded-xl border border-neutral-200 bg-neutral-50 p-4">
+                      <div className="text-sm font-medium mb-2">Customer</div>
+                      {order.customer?.name && (
+                        <div className="text-sm">
+                          <span className="text-neutral-500">Name: </span>
+                          {order.customer.name}
+                        </div>
+                      )}
+                      {order.customer?.email && (
+                        <div className="text-sm">
+                          <span className="text-neutral-500">Email: </span>
+                          {order.customer.email}
+                        </div>
+                      )}
+                      {order.customer?.phone && (
+                        <div className="text-sm">
+                          <span className="text-neutral-500">Phone: </span>
+                          {order.customer.phone}
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {/* Actions */}
+                  <div className="mt-4 flex flex-wrap gap-2">
+                    {oid && (
+                      <a
+                        className="px-4 py-2 rounded-xl border border-neutral-300 hover:bg-neutral-50"
+                        href={`/api/orders/receipt.pdt?orderId=${encodeURIComponent(oid)}`}
+                        target="_blank"
+                        rel="noreferrer"
+                      >
+                        Download receipt (PDF)
+                      </a>
                     )}
-                    {order.customer?.email && (
-                      <div className="text-sm">
-                        <span className="text-neutral-500">Email: </span>
-                        {order.customer.email}
-                      </div>
-                    )}
-                    {order.customer?.phone && (
-                      <div className="text-sm">
-                        <span className="text-neutral-500">Phone: </span>
-                        {order.customer.phone}
-                      </div>
-                    )}
+                    <button
+                      onClick={() => router.reload()}
+                      className="px-4 py-2 rounded-xl bg-neutral-900 text-white hover:bg-neutral-800"
+                    >
+                      Refresh status
+                    </button>
+                  </div>
+                </>
+              )}
+            </section>
+
+            {/* Aside with QR */}
+            <aside className="rounded-2xl border border-neutral-200 bg-white/70 backdrop-blur p-4 lg:sticky lg:top-8 h-fit">
+              <div className="text-sm font-semibold leading-tight">Scan to view your order</div>
+              <div className="mt-2">
+                {oid && (
+                  <div className="p-2 rounded-xl border border-neutral-200 inline-block bg-white">
+                    <div className="w-[168px] h-[168px] flex items-center justify-center">
+                      {typeof window === "undefined" ? (
+                        <div className="text-xs text-neutral-500">Loading QR…</div>
+                      ) : (
+                        <QRCodeCanvas id="order-qr" value={trackUrl} size={160} includeMargin={false} level="M" />
+                      )}
+                    </div>
                   </div>
                 )}
+              </div>
+              <p className="text-[12px] text-neutral-500 mt-3">
+                Open this page later to check updated status. You can also hit “Refresh status”.
+              </p>
+            </aside>
+          </div>
+        </main>
+      )}
 
-                {/* Actions */}
-                <div className="mt-4 flex flex-wrap gap-2">
-                  {oid && (
-                    <a
-                      className="px-4 py-2 rounded-xl border border-neutral-300 hover:bg-neutral-50"
-                      href={`/api/orders/receipt.pdt?orderId=${encodeURIComponent(oid)}`}
-                      target="_blank"
-                      rel="noreferrer"
-                    >
-                      Download receipt (PDF)
-                    </a>
-                  )}
-                  <button
-                    onClick={() => router.reload()}
-                    className="px-4 py-2 rounded-xl bg-neutral-900 text-white hover:bg-neutral-800"
-                  >
-                    Refresh status
-                  </button>
-                </div>
-              </>
-            )}
-          </section>
-
-          {/* Aside with QR */}
-          <aside className="rounded-2xl border border-neutral-200 bg-white/70 backdrop-blur p-4 lg:sticky lg:top-8 h-fit">
-            <div className="text-sm font-semibold leading-tight">Scan to view your order</div>
-            <div className="mt-2">
-              {oid && (
-                <div className="p-2 rounded-xl border border-neutral-200 inline-block bg-white">
-                  <div className="w-[168px] h-[168px] flex items-center justify-center">
-                    {/* Fallback text if QR lib not yet loaded */}
-                    {typeof window === "undefined" ? (
-                      <div className="text-xs text-neutral-500">Loading QR…</div>
-                    ) : (
-                      <QRCodeCanvas
-                        id="order-qr"
-                        value={trackUrl}
-                        size={160}
-                        includeMargin={false}
-                        level="M"
-                      />
-                    )}
-                  </div>
-                </div>
-              )}
-            </div>
-            <p className="text-[12px] text-neutral-500 mt-3">
-              Open this page later to check updated status. You can also hit “Refresh status”.
-            </p>
-          </aside>
-        </div>
-      </main>
+      {/* Footer at bottom */}
+      <Footer />
     </>
   );
 }
