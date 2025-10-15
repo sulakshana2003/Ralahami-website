@@ -3,6 +3,10 @@ import type { NextApiRequest, NextApiResponse } from "next";
 import { z } from "zod";
 import { dbConnect } from "@/lib/db";
 import Product from "@/models/Product";
+import type { Model } from "mongoose"; // ✅ minimal addition
+
+// ✅ minimal TS fix: cast to a Mongoose Model so find/findOne/create/countDocuments are typed
+const ProductModel = Product as unknown as Model<any>;
 
 const createSchema = z.object({
   name: z.string().min(1),
@@ -29,7 +33,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     if (category) where.category = String(category);
     if (signatureToday === "1") where.isSignatureToday = true;
 
-    const products = await Product.find(where)
+    const products = await ProductModel.find(where)
       .sort({ isSignatureToday: -1, createdAt: -1 })
       .limit(Number(limit));
 
@@ -40,17 +44,17 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
       const body = createSchema.parse(req.body);
 
-      const exists = await Product.findOne({ slug: body.slug });
+      const exists = await ProductModel.findOne({ slug: body.slug });
       if (exists) return res.status(409).json({ message: "Slug already exists" });
 
       if (body.isSignatureToday) {
-        const count = await Product.countDocuments({ isSignatureToday: true });
+        const count = await ProductModel.countDocuments({ isSignatureToday: true });
         if (count >= 4) {
           return res.status(400).json({ message: "Signature dishes today limit reached (4)." });
         }
       }
 
-      const doc = await Product.create(body);
+      const doc = await ProductModel.create(body);
       return res.status(201).json(doc);
     } catch (e: any) {
       return res.status(400).json({ message: e.message });

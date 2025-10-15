@@ -2,6 +2,10 @@
 import type { NextApiRequest, NextApiResponse } from 'next'
 import { dbConnect } from '@/lib/db'
 import Product from '@/models/Product'
+import type { Model } from 'mongoose'
+
+// ✅ Minimal TS fix: cast to a Mongoose Model to get findOne / findOneAndUpdate / findOneAndDelete types
+const ProductModel = Product as unknown as Model<any>
 
 // This endpoint works by slug, not _id.
 // Supports: GET (read one), PUT/PATCH (update), DELETE (remove)
@@ -16,7 +20,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === 'GET') {
-    const product = await Product.findOne({ slug })
+    const product = await ProductModel.findOne({ slug })
     if (!product) return res.status(404).json({ message: 'Not found' })
     return res.status(200).json(product)
   }
@@ -25,7 +29,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
     try {
       // Keep slug stable unless you intentionally allow changing it
       const { slug: bodySlug, ...rest } = req.body ?? {}
-      const doc = await Product.findOneAndUpdate(
+      const doc = await ProductModel.findOneAndUpdate(
         { slug },
         { $set: rest },
         { new: true, runValidators: true }
@@ -38,7 +42,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   }
 
   if (req.method === 'DELETE') {
-    const doc = await Product.findOneAndDelete({ slug })
+    const doc = await ProductModel.findOneAndDelete({ slug })
     if (!doc) return res.status(404).json({ message: 'Not found' })
     return res.status(200).json({ ok: true })
   }

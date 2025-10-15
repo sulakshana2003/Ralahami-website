@@ -3,7 +3,7 @@
 
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import DashboardLayout from "../components/DashboardLayout";
-import AdminGuard from "../components/AdminGuard";
+import AdminGuard from "../../src/components/AdminGuard";
 
 /* ---------- Recharts ---------- */
 import {
@@ -499,15 +499,17 @@ export default function AdminOrdersPage() {
     cursorY = Math.max(leftTableBottom, rightTableBottom) + 8;
 
     // 4) Charts — export only the main SVG of each chart card
-    const chartBlocks: { ref: React.RefObject<HTMLDivElement>; title: string }[] = [
-      { ref: chartRefs.daily,      title: "Daily Revenue & Orders" },
-      { ref: chartRefs.cumulative, title: "Cumulative Revenue" },
-      { ref: chartRefs.revCost,    title: "Revenue vs Cost (Daily)" },
-      { ref: chartRefs.method,     title: "Payment Methods (Revenue Share)" },
-      { ref: chartRefs.source,     title: "Revenue by Source" },
-      { ref: chartRefs.weekday,    title: "Orders by Weekday" },
-      { ref: chartRefs.hour,       title: "Orders by Hour" },
-    ];
+type DivRef = React.MutableRefObject<HTMLDivElement | null>;
+
+const chartBlocks: Array<{ ref: DivRef; title: string }> = [
+  { ref: chartRefs.daily,      title: "Daily Revenue & Orders" },
+  { ref: chartRefs.cumulative, title: "Cumulative Revenue" },
+  { ref: chartRefs.revCost,    title: "Revenue vs Cost (Daily)" },
+  { ref: chartRefs.method,     title: "Payment Methods (Revenue Share)" },
+  { ref: chartRefs.source,     title: "Revenue by Source" },
+  { ref: chartRefs.weekday,    title: "Orders by Weekday" },
+  { ref: chartRefs.hour,       title: "Orders by Hour" },
+];
 
     for (const block of chartBlocks) {
       const el = block.ref.current as HTMLElement | null;
