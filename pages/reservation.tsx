@@ -9,6 +9,7 @@ import Footer from '../pages/components/Footer'
 type Slot = { time: string; remaining: number }
 
 export default function ReservationPage() {
+  // Today in the user’s local time (Asia/Colombo from your app)
   const todayStr = useMemo(() => format(new Date(), 'yyyy-MM-dd'), [])
   const [date, setDate] = useState(todayStr)
   const [slots, setSlots] = useState<Slot[]>([])
@@ -24,8 +25,15 @@ export default function ReservationPage() {
   const [successId, setSuccessId] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
+  // NEW: If anything sets a past date into state, clamp it back to today
+  useEffect(() => {
+    if (date < todayStr) setDate(todayStr)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [date])
+
   // Load availability when date changes
   useEffect(() => {
+    if (date < todayStr) return // NEW: no fetch for past dates (extra safety)
     const run = async () => {
       setLoadingSlots(true)
       setError(null)
@@ -34,7 +42,6 @@ export default function ReservationPage() {
         const j = await r.json()
         if (!r.ok) throw new Error(j?.message || 'Failed to load slots')
         setSlots(j.slots || [])
-        // pick first available
         const first = (j.slots || []).find((s: Slot) => s.remaining > 0)
         setTime(first?.time || '')
       } catch (e: any) {
@@ -45,24 +52,30 @@ export default function ReservationPage() {
       }
     }
     run()
-  }, [date])
+  }, [date, todayStr])
 
   async function onSubmit(e: React.FormEvent) {
-  e.preventDefault()
+    e.preventDefault()
 
-  if (phone) {
-    if (phone.startsWith('-')) {
-      setError('Phone number cannot be negative')
+    // NEW: prevent submitting a past date
+    if (date < todayStr) {
+      setError('You cannot book a past date.')
       return
     }
-    if (!/^\d+$/.test(phone)) {
-      setError('Phone number must contain only digits')
-      return
-    }
-  }
 
-  setSubmitting(true)
-  setError(null)
+    if (phone) {
+      if (phone.startsWith('-')) {
+        setError('Phone number cannot be negative')
+        return
+      }
+      if (!/^\d+$/.test(phone)) {
+        setError('Phone number must contain only digits')
+        return
+      }
+    }
+
+    setSubmitting(true)
+    setError(null)
     try {
       const r = await fetch('/api/reservations', {
         method: 'POST',
@@ -85,24 +98,18 @@ export default function ReservationPage() {
       <Navbar />
 
       <div
-  className="relative pt-28 pb-16 min-h-screen bg-cover bg-center"
-  style={{ backgroundImage: "url('/images/reservation-bg.png')" }}
->
-  {/* dark overlay */}
-  <div className="absolute inset-0 bg-black/25" />
-
-  {/* content above overlay */}
-  <div className="relative mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8">
-    ...
-
+        className="relative pt-28 pb-16 min-h-screen bg-cover bg-center"
+        style={{ backgroundImage: "url('/images/reservation-bg.png')" }}
+      >
+        <div className="absolute inset-0 bg-black/25" />
+        <div className="relative mx-auto w-full max-w-5xl px-4 sm:px-6 lg:px-8">
           <div className="mb-8 text-center bg-white/90 backdrop-blur rounded-xl p-6 shadow-lg mx-auto max-w-3xl">
-  <p className="text-xs tracking-[0.25em] text-amber-600 uppercase">Reservation</p>
-  <h1 className="mt-2 text-4xl font-semibold">Book a Table</h1>
-  <p className="mt-2 text-neutral-600">
-    Select a date & time, tell us your party size, and we’ll save your table!
-  </p>
-</div>
-
+            <p className="text-xs tracking-[0.25em] text-amber-600 uppercase">Reservation</p>
+            <h1 className="mt-2 text-4xl font-semibold">Book a Table</h1>
+            <p className="mt-2 text-neutral-600">
+              Select a date & time, tell us your party size, and we’ll save your table!
+            </p>
+          </div>
 
           {successId ? (
             <div className="rounded-2xl border border-green-200 bg-green-50 p-6">
@@ -116,23 +123,34 @@ export default function ReservationPage() {
               </a>
             </div>
           ) : (
-            <form
-  onSubmit={onSubmit}
-  className="grid gap-5 rounded-2xl border p-6 sm:grid-cols-2 bg-white/90 backdrop-blur shadow-xl"
->
-
+            <form onSubmit={onSubmit} className="grid gap-5 rounded-2xl border p-6 sm:grid-cols-2 bg-white/90 backdrop-blur shadow-xl">
               {/* Left column */}
               <div className="space-y-4">
                 <div>
                   <label className="block text-sm font-medium">Date</label>
-                  <input type="date" className="mt-1 w-full rounded-xl border px-3 h-11"
-                         value={date} onChange={(e) => setDate(e.target.value)} required />
+                  <input
+                    type="date"
+                    className="mt-1 w-full rounded-xl border px-3 h-11"
+                    value={date}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      // NEW: clamp to today if user tries to pick a past date
+                      setDate(v < todayStr ? todayStr : v)
+                    }}
+                    required
+                    min={todayStr} // NEW: HTML-level lock for past dates
+                  />
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium">Time</label>
-                  <select className="mt-1 w-full rounded-xl border px-3 h-11"
-                          value={time} onChange={(e) => setTime(e.target.value)} required disabled={loadingSlots || slots.length === 0}>
+                  <select
+                    className="mt-1 w-full rounded-xl border px-3 h-11"
+                    value={time}
+                    onChange={(e) => setTime(e.target.value)}
+                    required
+                    disabled={loadingSlots || slots.length === 0}
+                  >
                     {loadingSlots && <option>Loading…</option>}
                     {!loadingSlots && slots.length === 0 && <option>No slots available</option>}
                     {!loadingSlots && slots.map((s) => (
@@ -145,9 +163,13 @@ export default function ReservationPage() {
 
                 <div>
                   <label className="block text-sm font-medium">Party size</label>
-                  <input type="number" min={1} max={12}
-                         className="mt-1 w-full rounded-xl border px-3 h-11"
-                         value={partySize} onChange={(e) => setPartySize(Number(e.target.value))} required />
+                  <input
+                    type="number" min={1} max={12}
+                    className="mt-1 w-full rounded-xl border px-3 h-11"
+                    value={partySize}
+                    onChange={(e) => setPartySize(Number(e.target.value))}
+                    required
+                  />
                 </div>
               </div>
 
@@ -156,44 +178,44 @@ export default function ReservationPage() {
                 <div>
                   <label className="block text-sm font-medium">Full name</label>
                   <input className="mt-1 w-full rounded-xl border px-3 h-11"
-                         value={name} onChange={(e) => setName(e.target.value)} required />
+                    value={name} onChange={(e) => setName(e.target.value)} required />
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium">Email</label>
                   <input type="email" className="mt-1 w-full rounded-xl border px-3 h-11"
-                         value={email} onChange={(e) => setEmail(e.target.value)} required />
+                    value={email} onChange={(e) => setEmail(e.target.value)} required />
                 </div>
 
                 <div>
                   <label className="block text-sm font-medium">Phone </label>
                   <input
-                  type="tel"
-  inputMode="numeric"
-  pattern="[0-9]*"
-  className="mt-1 w-full rounded-xl border px-3 h-11"
-  value={phone}
-  onChange={(e) => {
-    const v = e.target.value
-    if (v.startsWith('-')) {
-      setError('Phone number cannot be negative')
-      return
-    }
-    if (!/^\d*$/.test(v)) {
-      setError('Phone number must contain only digits')
-      return
-    }
-    setError(null)
-    setPhone(v)
-  }}
-/>
+                    type="tel"
+                    inputMode="numeric"
+                    pattern="[0-9]*"
+                    className="mt-1 w-full rounded-xl border px-3 h-11"
+                    value={phone}
+                    onChange={(e) => {
+                      const v = e.target.value
+                      if (v.startsWith('-')) {
+                        setError('Phone number cannot be negative')
+                        return
+                      }
+                      if (!/^\d*$/.test(v)) {
+                        setError('Phone number must contain only digits')
+                        return
+                      }
+                      setError(null)
+                      setPhone(v)
+                    }}
+                  />
                 </div>
               </div>
 
               <div className="sm:col-span-2">
                 <label className="block text-sm font-medium">Special requests (optional)</label>
                 <textarea className="mt-1 w-full rounded-xl border px-3 py-2" rows={3}
-                          value={notes} onChange={(e) => setNotes(e.target.value)} />
+                  value={notes} onChange={(e) => setNotes(e.target.value)} />
               </div>
 
               {error && <p className="sm:col-span-2 text-sm text-red-600">{error}</p>}
@@ -207,7 +229,7 @@ export default function ReservationPage() {
           )}
         </div>
       </div>
-      <Footer/>
+      <Footer />
     </>
   )
 }
