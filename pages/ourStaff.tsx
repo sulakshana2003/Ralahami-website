@@ -1,6 +1,8 @@
 // src/components/OurStaff.tsx
 
 import React from 'react';
+import Navbar from './components/Navbar';
+import Footer from './components/Footer';
 
 // Define a type for our staff member object for type safety
 type StaffMember = {
@@ -48,6 +50,8 @@ const staffData: StaffMember[] = [
 const OurStaffPage = () => {
   return (
     // The main container inherits the themed background from your global styles
+    <>
+    <Navbar/>
     <div className="py-12 px-4 sm:px-6 lg:py-16 lg:px-8">
       <div className="mx-auto max-w-7xl">
         <div className="space-y-4 text-center">
@@ -87,6 +91,9 @@ const OurStaffPage = () => {
         </div>
       </div>
     </div>
+    <Footer/>
+    </>
+    
   );
 };
 
